@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador 3D - Grúa Móvil Telescópica</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Three.js and OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      overflow: hidden;
+      background-color: #080d1a;
+      color: #f3f4f6;
+    }
+    .mono-font {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(245, 158, 11, 0.4);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(245, 158, 11, 0.8);
+    }
+    .glassmorphism {
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6);
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      height: 6px;
+      border-radius: 9999px;
+      background: #334155;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #eab308;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(234, 179, 8, 0.8);
+      transition: transform 0.15s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+    .pivot-pulse {
+      animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 0.3; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+  </style>
+</head>
+
+<body class="h-full w-full select-none overflow-hidden relative">
+
+  <!-- 3D Canvas Container -->
+  <div id="canvas-container" class="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing z-0">
+    <canvas id="crane-canvas" class="w-full h-full block"></canvas>
+  </div>
+
+  <!-- Header Section -->
+  <header class="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none z-10">
+    <div class="glassmorphism pointer-events-auto px-4 py-2.5 rounded-2xl flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
+        <i class="fa-solid fa-truck-moving text-slate-950 text-lg"></i>
+      </div>
+      <div>
+        <h1 class="text-sm font-bold tracking-wide text-white flex items-center gap-2">
+          GRÚA MÓVIL TELESCÓPICA 3D
+          <span class="text-[10px] bg-amber-500/20 text-amber-300 font-semibold px-2 py-0.5 rounded-full border border-amber-500/40">Maquinaria Pesada</span>
+        </h1>
+        <p class="text-xs text-gray-400">Brazo extensible, puntos de pivote visibles y carga suspendida</p>
+      </div>
+    </div>
+
+    <!-- Quick action buttons -->
+    <div class="glassmorphism pointer-events-auto px-3 py-2 rounded-2xl flex items-center gap-2">
+      <button id="btn-toggle-demo" class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold border border-amber-500/40 transition">
+        <i id="demo-icon" class="fa-solid fa-play text-xs"></i>
+        <span id="demo-text">Demo Automática</span>
+      </button>
+
+      <button id="btn-reset-cam" title="Restablecer Vista" class="w-8 h-8 rounded-xl flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-800 transition">
+        <i class="fa-solid fa-camera-rotate text-xs"></i>
+      </button>
+
+      <button id="btn-toggle-panel" title="Mostrar/Ocultar Menú" class="w-8 h-8 rounded-xl flex items-center justify-center text-amber-400 hover:bg-gray-800 transition">
+        <i class="fa-solid fa-sliders text-xs"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Interactive Controls Side Panel -->
+  <aside id="main-panel" class="absolute top-20 right-4 w-84 sm:w-96 glassmorphism rounded-3xl p-5 overflow-y-auto max-h-[calc(100vh-6rem)] flex flex-col gap-4 z-20 transition-all duration-300 transform translate-x-0">
+    
+    <!-- Realtime telemetry indicators -->
+    <div class="grid grid-cols-3 gap-2 text-center text-xs">
+      <div class="bg-slate-900/80 p-2.5 rounded-2xl border border-slate-800">
+        <span class="block text-gray-400 text-[10px] uppercase font-semibold">Radio Trabajo</span>
+        <span id="stat-radius" class="text-amber-400 font-bold text-sm mono-font">12.4 m</span>
+      </div>
+      <div class="bg-slate-900/80 p-2.5 rounded-2xl border border-slate-800">
+        <span class="block text-gray-400 text-[10px] uppercase font-semibold">Altura Gancho</span>
+        <span id="stat-height" class="text-cyan-400 font-bold text-sm mono-font">9.8 m</span>
+      </div>
+      <div class="bg-slate-900/80 p-2.5 rounded-2xl border border-slate-800">
+        <span class="block text-gray-400 text-[10px] uppercase font-semibold">Carga Actual</span>
+        <span id="stat-load" class="text-emerald-400 font-bold text-sm mono-font">12.5 T</span>
+      </div>
+    </div>
+
+    <!-- Active Mechanical Controls -->
+    <div class="space-y-3.5">
+      <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+        <i class="fa-solid fa-gears text-amber-400"></i> Cinemática y Movimiento
+      </h3>
+
+      <!-- 1. Slewing (Superstructure Rotation) -->
+      <div>
+        <div class="flex justify-between text-xs mb-1.5">
+          <span class="text-gray-300 flex items-center gap-1.5"><i class="fa-solid fa-arrows-rotate text-amber-400"></i> Giro Torreta (Azimut)</span>
+          <span id="val-slew" class="mono-font text-amber-400 font-medium">35°</span>
+        </div>
+        <input type="range" id="slider-slew" min="-180" max="180" step="1" value="35" class="w-full">
+      </div>
+
+      <!-- 2. Boom Elevation (Pitch) -->
+      <div>
+        <div class="flex justify-between text-xs mb-1.5">
+          <span class="text-gray-300 flex items-center gap-1.5"><i class="fa-solid fa-angle-up text-cyan-400"></i> Inclinación Brazo (Elevación)</span>
+          <span id="val-pitch" class="mono-font text-cyan-400 font-medium">42°</span>
+        </div>
+        <input type="range" id="slider-pitch" min="5" max="75" step="1" value="42" class="w-full">
+      </div>
+
+      <!-- 3. Telescopic Extension -->
+      <div>
+        <div class="flex justify-between text-xs mb-1.5">
+          <span class="text-gray-300 flex items-center gap-1.5"><i class="fa-solid fa-up-right-and-down-left-from-center text-emerald-400"></i> Extensión Telescópica</span>
+          <span id="val-extend" class="mono-font text-emerald-400 font-medium">1.6x (18.5m)</span>
+        </div>
+        <input type="range" id="slider-extend" min="1.0" max="2.6" step="0.05" value="1.6" class="w-full">
+      </div>
+
+      <!-- 4. Cable Winch / Hook Drop -->
+      <div>
+        <div class="flex justify-between text-xs mb-1.5">
+          <span class="text-gray-300 flex items-center gap-1.5"><i class="fa-solid fa-lines-leaning text-indigo-400"></i> Descenso del Cable / Carga</span>
+          <span id="val-cable" class="mono-font text-indigo-400 font-medium">6.0 m</span>
+        </div>
+        <input type="range" id="slider-cable" min="2.0" max="14.0" step="0.2" value="6.0" class="w-full">
+      </div>
+    </div>
+
+    <!-- Pivot Markers & Visual Layers -->
+    <div class="border-t border-slate-800 pt-3 space-y-2">
+      <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+        <i class="fa-solid fa-bullseye text-red-400"></i> Indicadores y Puntos Clave
+      </h3>
+
+      <label class="flex items-center justify-between text-xs text-gray-200 p-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800/80 cursor-pointer border border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full bg-red-500 shadow-md shadow-red-500/80 inline-block"></span>
+          <div>
+            <span class="font-semibold block">Puntos de Pivote Estructural</span>
+            <span class="text-[10px] text-gray-400 block">Eje de Giro vertical y Articulación de elevación</span>
+          </div>
+        </div>
+        <input type="checkbox" id="toggle-pivots" checked class="w-4 h-4 accent-amber-500 rounded">
+      </label>
+
+      <label class="flex items-center justify-between text-xs text-gray-200 p-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800/80 cursor-pointer border border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-md shadow-emerald-500/80 inline-block"></span>
+          <div>
+            <span class="font-semibold block">Estabilizadores (Outriggers)</span>
+            <span class="text-[10px] text-gray-400 block">Apoyos hidráulicos en el suelo</span>
+          </div>
+        </div>
+        <input type="checkbox" id="toggle-outriggers" checked class="w-4 h-4 accent-amber-500 rounded">
+      </label>
+
+      <label class="flex items-center justify-between text-xs text-gray-200 p-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800/80 cursor-pointer border border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full bg-cyan-500 shadow-md shadow-cyan-500/80 inline-block"></span>
+          <div>
+            <span class="font-semibold block">Cilindro Hidráulico del Fuste</span>
+            <span class="text-[10px] text-gray-400 block">Émbolo telescópico de elevación</span>
+          </div>
+        </div>
+        <input type="checkbox" id="toggle-cylinder" checked class="w-4 h-4 accent-amber-500 rounded">
+      </label>
+    </div>
+
+    <!-- Quick Preset Buttons -->
+    <div class="border-t border-slate-800 pt-3">
+      <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+        <i class="fa-solid fa-compass text-amber-400"></i> Posiciones Predefinidas
+      </h3>
+      <div class="grid grid-cols-3 gap-1.5 text-xs">
+        <button id="preset-transport" class="px-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-gray-200 border border-slate-700 transition flex flex-col items-center">
+          <i class="fa-solid fa-road text-amber-400 text-xs mb-1"></i>
+          <span class="text-[10px]">Transporte</span>
+        </button>
+        <button id="preset-working" class="px-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-gray-200 border border-slate-700 transition flex flex-col items-center">
+          <i class="fa-solid fa-person-digging text-cyan-400 text-xs mb-1"></i>
+          <span class="text-[10px]">Operación</span>
+        </button>
+        <button id="preset-reach" class="px-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-gray-200 border border-slate-700 transition flex flex-col items-center">
+          <i class="fa-solid fa-arrows-up-to-line text-emerald-400 text-xs mb-1"></i>
+          <span class="text-[10px]">Alcance Máx</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Instructions Footer -->
+  <footer class="absolute bottom-4 left-4 glassmorphism px-4 py-2 rounded-2xl flex items-center gap-4 text-xs text-gray-400 pointer-events-none z-10">
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-computer-mouse text-amber-400"></i> Clic y Arrastre: Rotar cámara</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass-plus text-amber-400"></i> Rueda: Zoom</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-hand text-amber-400"></i> Clic derecho: Paneo</span>
+  </footer>
+
+  <!-- Toast Notification Modal -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 glassmorphism px-5 py-2.5 rounded-full text-xs font-medium text-white shadow-xl opacity-0 pointer-events-none transition-all duration-300 transform translate-y-3 z-50 flex items-center gap-2">
+    <i class="fa-solid fa-circle-check text-amber-400"></i>
+    <span id="toast-text">Vista actualizada</span>
+  </div>
+
+  <script>
+    /* Global Simulation State */
+    let scene, camera, renderer, controls;
+    let craneRoot, chassisGroup, slewingRingGroup, superstructureGroup;
+    let boomBaseHingeGroup, boomSection2, boomSection3, boomTipGroup;
+    let hydraulicBarrel, hydraulicRod;
+    let cableLine, hookBlockGroup, hangingWeightGroup, outriggersGroup;
+    let pivotMarkersGroup;
+
+    // Kinematic Values
+    let slewAngleDeg = 35;       // Torreta rotation (-180 to 180)
+    let boomPitchDeg = 42;       // Boom elevation (5 to 75)
+    let telescopicExtension = 1.6; // 1.0 (retracted) to 2.6 (fully extended)
+    let cableDropLength = 6.0;   // Distance down from tip to hook
+    let isDemoRunning = false;
+    let demoTime = 0;
+
+    // Materials
+    let matYellowPaint, matDarkMetal, matChrome, matGlass, matHazardStripes;
+    let matTireRubber, matWeightConcrete;
+
+    // Procedural Industrial Textures
+    function createHazardTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      // Yellow & black safety stripes
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(0, 0, 256, 256);
+
+      ctx.fillStyle = '#111827';
+      ctx.lineWidth = 28;
+      for (let i = -256; i < 512; i += 56) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i + 256, 256);
+        ctx.lineTo(i + 284, 256);
+        ctx.lineTo(i + 28, 0);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    }
+
+    function createConcreteWeightTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      // Rough dark industrial cast concrete
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Noise
+      for (let i = 0; i < 30000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const c = 60 + Math.floor(Math.random() * 40);
+        ctx.fillStyle = `rgb(${c}, ${c}, ${c})`;
+        ctx.fillRect(x, y, 2, 2);
+      }
+
+      // Stencil "15 TON" text on payload
+      ctx.font = 'bold 70px monospace';
+      ctx.fillStyle = '#f8fafc';
+      ctx.textAlign = 'center';
+      ctx.fillText('15.0 TON', 256, 270);
+
+      // Safety cross border
+      ctx.strokeStyle = '#eab308';
+      ctx.lineWidth = 14;
+      ctx.strokeRect(30, 30, 452, 452);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      return texture;
+    }
+  </script>
+
+  <script>
+    function buildChassis() {
+      chassisGroup = new THREE.Group();
+
+      matYellowPaint = new THREE.MeshStandardMaterial({
+        color: 0xebb305,
+        roughness: 0.35,
+        metalness: 0.25
+      });
+
+      matDarkMetal = new THREE.MeshStandardMaterial({
+        color: 0x1e293b,
+        roughness: 0.7,
+        metalness: 0.6
+      });
+
+      matChrome = new THREE.MeshStandardMaterial({
+        color: 0xe2e8f0,
+        roughness: 0.15,
+        metalness: 0.95
+      });
+
+      matGlass = new THREE.MeshPhysicalMaterial({
+        color: 0x38bdf8,
+        metalness: 0.1,
+        roughness: 0.1,
+        transmission: 0.85,
+        transparent: true,
+        opacity: 0.8
+      });
+
+      matHazardStripes = new THREE.MeshStandardMaterial({
+        map: createHazardTexture(),
+        roughness: 0.5
+      });
+
+      matTireRubber = new THREE.MeshStandardMaterial({
+        color: 0x111827,
+        roughness: 0.9,
+        metalness: 0.05
+      });
+
+      matWeightConcrete = new THREE.MeshStandardMaterial({
+        map: createConcreteWeightTexture(),
+        roughness: 0.85,
+        metalness: 0.1
+      });
+
+      // 1. Heavy Carrier Frame (Bastidor principal)
+      const chassisLength = 13.5;
+      const chassisWidth = 3.2;
+      const chassisHeight = 1.3;
+      const chassisGeo = new THREE.BoxGeometry(chassisWidth, chassisHeight, chassisLength);
+      const chassisMesh = new THREE.Mesh(chassisGeo, matYellowPaint);
+      chassisMesh.castShadow = true;
+      chassisMesh.receiveShadow = true;
+      chassisMesh.position.set(0, 1.6, 0);
+      chassisGroup.add(chassisMesh);
+
+      // Deck Tread Plate on top
+      const deckGeo = new THREE.BoxGeometry(chassisWidth + 0.1, 0.1, chassisLength - 0.2);
+      const deckMesh = new THREE.Mesh(deckGeo, matDarkMetal);
+      deckMesh.position.set(0, 2.3, 0);
+      chassisGroup.add(deckMesh);
+
+      // 2. Driver Cab (Front of mobile crane)
+      const cabGeo = new THREE.BoxGeometry(3.0, 1.8, 3.2);
+      const cabMesh = new THREE.Mesh(cabGeo, matYellowPaint);
+      cabMesh.position.set(0, 2.5, 4.8);
+      cabMesh.castShadow = true;
+      chassisGroup.add(cabMesh);
+
+      // Front Windshield
+      const winGeo = new THREE.BoxGeometry(2.7, 1.1, 0.1);
+      const winMesh = new THREE.Mesh(winGeo, matGlass);
+      winMesh.position.set(0, 2.7, 6.45);
+      chassisGroup.add(winMesh);
+
+      // Headlights & Grille
+      const bumperGeo = new THREE.BoxGeometry(3.2, 0.6, 0.4);
+      const bumperMesh = new THREE.Mesh(bumperGeo, matHazardStripes);
+      bumperMesh.position.set(0, 1.2, 6.7);
+      chassisGroup.add(bumperMesh);
+
+      // Rear Bumper
+      const rearBumperGeo = new THREE.BoxGeometry(3.2, 0.6, 0.4);
+      const rearBumperMesh = new THREE.Mesh(rearBumperGeo, matHazardStripes);
+      rearBumperMesh.position.set(0, 1.2, -6.7);
+      chassisGroup.add(rearBumperMesh);
+
+      // 3. 4-Axle Heavy Wheels (8 Wheels Total)
+      const wheelGeo = new THREE.CylinderGeometry(0.72, 0.72, 0.55, 24);
+      wheelGeo.rotateZ(Math.PI / 2);
+      const rimGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.58, 16);
+      rimGeo.rotateZ(Math.PI / 2);
+
+      const axlePositionsZ = [5.0, 2.8, -3.2, -5.2];
+      axlePositionsZ.forEach(zPos => {
+        [-1.75, 1.75].forEach(xPos => {
+          const wheel = new THREE.Mesh(wheelGeo, matTireRubber);
+          wheel.castShadow = true;
+          wheel.position.set(xPos, 0.72, zPos);
+
+          const rim = new THREE.Mesh(rimGeo, matDarkMetal);
+          wheel.add(rim);
+
+          chassisGroup.add(wheel);
+        });
+      });
+
+      // 4. Hydraulic Outriggers (Estabilizadores desplegados)
+      outriggersGroup = new THREE.Group();
+      const legPositions = [
+        { x: -3.0, z: 3.8 },
+        { x: 3.0, z: 3.8 },
+        { x: -3.0, z: -4.0 },
+        { x: 3.0, z: -4.0 }
+      ];
+
+      legPositions.forEach(pos => {
+        // Horizontal extension beam
+        const beamGeo = new THREE.BoxGeometry(2.2, 0.35, 0.4);
+        const beamMesh = new THREE.Mesh(beamGeo, matDarkMetal);
+        const dir = Math.sign(pos.x);
+        beamMesh.position.set(dir * 2.0, 1.4, pos.z);
+        outriggersGroup.add(beamMesh);
+
+        // Vertical hydraulic jack
+        const jackGeo = new THREE.CylinderGeometry(0.12, 0.12, 1.4, 16);
+        const jackMesh = new THREE.Mesh(jackGeo, matChrome);
+        jackMesh.position.set(pos.x, 0.7, pos.z);
+        outriggersGroup.add(jackMesh);
+
+        // Ground Support Footpad
+        const padGeo = new THREE.CylinderGeometry(0.65, 0.75, 0.15, 20);
+        const padMesh = new THREE.Mesh(padGeo, matDarkMetal);
+        padMesh.position.set(pos.x, 0.08, pos.z);
+        padMesh.receiveShadow = true;
+        outriggersGroup.add(padMesh);
+      });
+
+      chassisGroup.add(outriggersGroup);
+      craneRoot.add(chassisGroup);
+    }
+  </script>
+
+  <script>
+    // Slewing ring position in world space
+    const SLEWING_PIVOT_Y = 2.35;
+    const SLEWING_PIVOT_Z = -1.2;
+
+    // Boom elevation hinge relative to superstructure
+    const BOOM_HINGE_LOCAL_Y = 1.6;
+    const BOOM_HINGE_LOCAL_Z = -1.8;
+
+    function buildSuperstructureAndPivots() {
+      // 1. Slewing Ring Base (Crown gear / Corona de giro)
+      const ringGeo = new THREE.CylinderGeometry(1.6, 1.6, 0.3, 32);
+      const ringMesh = new THREE.Mesh(ringGeo, matDarkMetal);
+      ringMesh.position.set(0, SLEWING_PIVOT_Y + 0.15, SLEWING_PIVOT_Z);
+      craneRoot.add(ringMesh);
+
+      // 2. Superstructure Pivot Group (Rotates along Y-axis)
+      slewingRingGroup = new THREE.Group();
+      slewingRingGroup.position.set(0, SLEWING_PIVOT_Y + 0.3, SLEWING_PIVOT_Z);
+      craneRoot.add(slewingRingGroup);
+
+      superstructureGroup = new THREE.Group();
+      slewingRingGroup.add(superstructureGroup);
+
+      // Turntable platform
+      const deckGeo = new THREE.BoxGeometry(3.0, 0.5, 4.4);
+      const deckMesh = new THREE.Mesh(deckGeo, matDarkMetal);
+      deckMesh.position.set(0, 0.25, 0);
+      superstructureGroup.add(deckMesh);
+
+      // Counterweight stack at the rear
+      const cwGeo = new THREE.BoxGeometry(2.9, 1.4, 1.2);
+      const cwMesh = new THREE.Mesh(cwGeo, matHazardStripes);
+      cwMesh.position.set(0, 1.1, -1.8);
+      cwMesh.castShadow = true;
+      superstructureGroup.add(cwMesh);
+
+      // Operator Crane Cabin on the left
+      const opCabGeo = new THREE.BoxGeometry(1.1, 1.8, 2.2);
+      const opCabMesh = new THREE.Mesh(opCabGeo, matYellowPaint);
+      opCabMesh.position.set(-1.0, 1.3, 0.4);
+      opCabMesh.castShadow = true;
+      superstructureGroup.add(opCabMesh);
+
+      // Operator Cabin Glass
+      const opGlassGeo = new THREE.BoxGeometry(1.12, 1.0, 1.4);
+      const opGlassMesh = new THREE.Mesh(opGlassGeo, matGlass);
+      opGlassMesh.position.set(-1.0, 1.5, 0.7);
+      superstructureGroup.add(opGlassMesh);
+
+      // Side Crane Winch Drum (Torno del cable)
+      const winchGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.0, 20);
+      winchGeo.rotateZ(Math.PI / 2);
+      const winchMesh = new THREE.Mesh(winchGeo, matDarkMetal);
+      winchMesh.position.set(0.7, 1.4, -1.2);
+      superstructureGroup.add(winchMesh);
+
+      // Stiff A-Frame Pivot Supports (Torretas laterales para el eje de pivote del brazo)
+      const supportGeo = new THREE.BoxGeometry(0.35, 1.8, 1.2);
+      const suppLeft = new THREE.Mesh(supportGeo, matYellowPaint);
+      suppLeft.position.set(-0.75, 1.1, BOOM_HINGE_LOCAL_Z);
+      const suppRight = new THREE.Mesh(supportGeo, matYellowPaint);
+      suppRight.position.set(0.75, 1.1, BOOM_HINGE_LOCAL_Z);
+      superstructureGroup.add(suppLeft);
+      superstructureGroup.add(suppRight);
+
+      // 3. Boom Elevation Hinge Group (Pivot for Pitch/Elevación)
+      boomBaseHingeGroup = new THREE.Group();
+      boomBaseHingeGroup.position.set(0, BOOM_HINGE_LOCAL_Y, BOOM_HINGE_LOCAL_Z);
+      superstructureGroup.add(boomBaseHingeGroup);
+
+      // Pin Hinge Axle (Bulón transversal visible)
+      const pinGeo = new THREE.CylinderGeometry(0.22, 0.22, 1.9, 24);
+      pinGeo.rotateZ(Math.PI / 2);
+      const pinMesh = new THREE.Mesh(pinGeo, matChrome);
+      boomBaseHingeGroup.add(pinMesh);
+
+      // 4. Prominent Pivot Point Indicators / Markers (Red Glowing Spheres and Axis Rings)
+      pivotMarkersGroup = new THREE.Group();
+
+      // Marker 1: Slewing Axis Pivot (Eje vertical de giro de torreta)
+      const slewMarkerGeo = new THREE.SphereGeometry(0.35, 24, 24);
+      const pivotMatRed = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+      const slewMarker = new THREE.Mesh(slewMarkerGeo, pivotMatRed);
+      slewMarker.position.set(0, 0.2, 0); // At slewing center
+      pivotMarkersGroup.add(slewMarker);
+
+      // Vertical Rotation Axis Ring
+      const slewRingGeo = new THREE.RingGeometry(1.7, 1.85, 36);
+      slewRingGeo.rotateX(Math.PI / 2);
+      const slewRingMat = new THREE.MeshBasicMaterial({ color: 0xef4444, side: THREE.DoubleSide });
+      const slewRingHelper = new THREE.Mesh(slewRingGeo, slewRingMat);
+      slewRingHelper.position.set(0, 0.25, 0);
+      pivotMarkersGroup.add(slewRingHelper);
+
+      // Marker 2: Elevation Hinge Pin Pivot (Eje horizontal de articulación del brazo)
+      const hingeMarkerGeo = new THREE.SphereGeometry(0.38, 24, 24);
+      const hingeMatYellow = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+      const hingeMarker = new THREE.Mesh(hingeMarkerGeo, hingeMatYellow);
+      hingeMarker.position.set(0, BOOM_HINGE_LOCAL_Y, BOOM_HINGE_LOCAL_Z);
+      pivotMarkersGroup.add(hingeMarker);
+
+      // Elevation Arc Helper (Indicador visual del ángulo de pivote)
+      const arcPoints = [];
+      for (let a = 0; a <= 80; a += 5) {
+        const rad = (a * Math.PI) / 180;
+        arcPoints.push(new THREE.Vector3(1.2, BOOM_HINGE_LOCAL_Y + Math.sin(rad) * 1.6, BOOM_HINGE_LOCAL_Z + Math.cos(rad) * 1.6));
+      }
+      const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints);
+      const arcMat = new THREE.LineBasicMaterial({ color: 0xfacc15, linewidth: 3 });
+      const arcLine = new THREE.Line(arcGeo, arcMat);
+      pivotMarkersGroup.add(arcLine);
+
+      superstructureGroup.add(pivotMarkersGroup);
+    }
+  </script>
+
+  <script>
+    function buildExtendableBoom() {
+      // Boom dimensions: Base section is 8 meters long along local +Z axis
+      const boomLength = 7.8;
+
+      // 1. Boom Base Section (Sección Principal del Brazo)
+      const baseGeo = new THREE.BoxGeometry(1.25, 1.35, boomLength);
+      // Offset geometry center so it extends forward along +Z from the hinge pin
+      baseGeo.translate(0, 0, boomLength / 2);
+      const boomBaseMesh = new THREE.Mesh(baseGeo, matYellowPaint);
+      boomBaseMesh.castShadow = true;
+      boomBaseHingeGroup.add(boomBaseMesh);
+
+      // 2. Telescopic Section 2 (Intermediate sliding stage)
+      boomSection2 = new THREE.Group();
+      boomSection2.position.set(0, 0, 1.0); // Will slide forward along Z
+
+      const s2Geo = new THREE.BoxGeometry(1.05, 1.15, boomLength);
+      s2Geo.translate(0, 0, boomLength / 2);
+      const s2Mesh = new THREE.Mesh(s2Geo, matDarkMetal);
+      s2Mesh.castShadow = true;
+      boomSection2.add(s2Mesh);
+      boomBaseHingeGroup.add(boomSection2);
+
+      // 3. Telescopic Section 3 (Tip extension stage)
+      boomSection3 = new THREE.Group();
+      boomSection3.position.set(0, 0, 1.0);
+
+      const s3Geo = new THREE.BoxGeometry(0.85, 0.95, boomLength);
+      s3Geo.translate(0, 0, boomLength / 2);
+      const s3Mesh = new THREE.Mesh(s3Geo, matYellowPaint);
+      s3Mesh.castShadow = true;
+      boomSection3.add(s3Mesh);
+
+      // Boom Head & Pulley Sheaves (Cabezal con poleas)
+      boomTipGroup = new THREE.Group();
+      boomTipGroup.position.set(0, 0, boomLength);
+
+      const headGeo = new THREE.BoxGeometry(0.8, 1.1, 0.9);
+      const headMesh = new THREE.Mesh(headGeo, matDarkMetal);
+      boomTipGroup.add(headMesh);
+
+      // Two Pulley Sheaves
+      const sheaveGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.15, 20);
+      sheaveGeo.rotateZ(Math.PI / 2);
+      const sheave1 = new THREE.Mesh(sheaveGeo, matChrome);
+      sheave1.position.set(-0.25, 0.3, 0.2);
+      const sheave2 = new THREE.Mesh(sheaveGeo, matChrome);
+      sheave2.position.set(0.25, 0.3, 0.2);
+      boomTipGroup.add(sheave1);
+      boomTipGroup.add(sheave2);
+
+      boomSection3.add(boomTipGroup);
+      boomSection2.add(boomSection3);
+
+      // 4. Hydraulic Elevation Cylinder (Between Superstructure and Boom Base)
+      hydraulicBarrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.28, 0.28, 3.2, 20),
+        matYellowPaint
+      );
+      hydraulicBarrel.castShadow = true;
+
+      hydraulicRod = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.18, 3.2, 20),
+        matChrome
+      );
+      hydraulicRod.castShadow = true;
+      hydraulicRod.position.set(0, 1.6, 0);
+      hydraulicBarrel.add(hydraulicRod);
+
+      superstructureGroup.add(hydraulicBarrel);
+    }
+  </script>
+
+  <script>
+    function buildHookAndWeight() {
+      // 1. Hook Block (Pasteca con poleas y gancho de forja)
+      hookBlockGroup = new THREE.Group();
+
+      const blockBodyGeo = new THREE.BoxGeometry(0.8, 1.2, 0.5);
+      const blockBody = new THREE.Mesh(blockBodyGeo, matHazardStripes);
+      blockBody.castShadow = true;
+      hookBlockGroup.add(blockBody);
+
+      // Top sheave inside block
+      const blockSheaveGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.4, 20);
+      blockSheaveGeo.rotateZ(Math.PI / 2);
+      const blockSheave = new THREE.Mesh(blockSheaveGeo, matDarkMetal);
+      blockSheave.position.set(0, 0.5, 0);
+      hookBlockGroup.add(blockSheave);
+
+      // Heavy Forged Steel Hook (Torus + Cone approximation)
+      const hookShankGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.4, 16);
+      const hookShank = new THREE.Mesh(hookShankGeo, matChrome);
+      hookShank.position.set(0, -0.75, 0);
+      hookBlockGroup.add(hookShank);
+
+      const hookCurveGeo = new THREE.TorusGeometry(0.35, 0.1, 16, 24, Math.PI * 1.35);
+      hookCurveGeo.rotateZ(Math.PI * 0.9);
+      const hookCurve = new THREE.Mesh(hookCurveGeo, matChrome);
+      hookCurve.position.set(0.15, -1.05, 0);
+      hookBlockGroup.add(hookCurve);
+
+      craneRoot.add(hookBlockGroup);
+
+      // 2. Hanging Weight (Carga / Contenedor de prueba de 15 Toneladas)
+      hangingWeightGroup = new THREE.Group();
+
+      // Main concrete/steel test block
+      const weightGeo = new THREE.BoxGeometry(2.4, 2.0, 2.4);
+      const weightMesh = new THREE.Mesh(weightGeo, matWeightConcrete);
+      weightMesh.castShadow = true;
+      weightMesh.receiveShadow = true;
+      weightMesh.position.set(0, -1.2, 0);
+      hangingWeightGroup.add(weightMesh);
+
+      // Lifting eye bolt (Cáncamo de izaje central)
+      const eyeGeo = new THREE.TorusGeometry(0.25, 0.08, 16, 24);
+      const eyeMesh = new THREE.Mesh(eyeGeo, matDarkMetal);
+      eyeMesh.position.set(0, 0.15, 0);
+      hangingWeightGroup.add(eyeMesh);
+
+      // 4-Leg Heavy Rigging Slings (Eslingas de cable de acero en ángulo)
+      const slingMat = new THREE.LineBasicMaterial({ color: 0x94a3b8, linewidth: 2 });
+      const corners = [
+        [-1.0, -0.2, -1.0],
+        [1.0, -0.2, -1.0],
+        [1.0, -0.2, 1.0],
+        [-1.0, -0.2, 1.0]
+      ];
+
+      corners.forEach(corner => {
+        const slingPoints = [
+          new THREE.Vector3(0, 0.15, 0),
+          new THREE.Vector3(corner[0], corner[1], corner[2])
+        ];
+        const slingGeo = new THREE.BufferGeometry().setFromPoints(slingPoints);
+        const slingLine = new THREE.Line(slingGeo, slingMat);
+        hangingWeightGroup.add(slingLine);
+      });
+
+      hookBlockGroup.add(hangingWeightGroup);
+      hangingWeightGroup.position.set(0, -1.4, 0);
+
+      // 3. Hoist Wire Rope Line (Cable vertical suspendido desde el cabezal de la pluma)
+      const cablePoints = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -10, 0)];
+      const cableGeo = new THREE.BufferGeometry().setFromPoints(cablePoints);
+      const cableMat = new THREE.LineBasicMaterial({ color: 0x1e293b, linewidth: 3 });
+      cableLine = new THREE.Line(cableGeo, cableMat);
+      craneRoot.add(cableLine);
+    }
+  </script>
+
+  <script>
+    function initThree() {
+      const container = document.getElementById('canvas-container');
+      const canvas = document.getElementById('crane-canvas');
+
+      // 1. Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x080d1a);
+      scene.fog = new THREE.FogExp2(0x080d1a, 0.015);
+
+      // 2. Camera
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(-22, 14, 25);
+
+      // 3. Renderer
+      renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      // 4. OrbitControls
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxDistance = 120;
+      controls.minDistance = 6;
+      controls.target.set(0, 6.0, 0);
+
+      // 5. Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      scene.add(ambientLight);
+
+      // Main Sun Directional Light
+      const sunLight = new THREE.DirectionalLight(0xfffbeb, 1.35);
+      sunLight.position.set(25, 45, 30);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = 2048;
+      sunLight.shadow.mapSize.height = 2048;
+      sunLight.shadow.camera.near = 0.5;
+      sunLight.shadow.camera.far = 120;
+      sunLight.shadow.camera.left = -30;
+      sunLight.shadow.camera.right = 30;
+      sunLight.shadow.camera.top = 30;
+      sunLight.shadow.camera.bottom = -30;
+      sunLight.shadow.bias = -0.0005;
+      scene.add(sunLight);
+
+      // Cool Fill Light from opposite side
+      const fillLight = new THREE.DirectionalLight(0x60a5fa, 0.5);
+      fillLight.position.set(-30, 20, -25);
+      scene.add(fillLight);
+
+      // 6. Ground Construction Surface & Reference Grid
+      const groundGeo = new THREE.PlaneGeometry(160, 160);
+      const groundMat = new THREE.MeshStandardMaterial({
+        color: 0x0f172a,
+        roughness: 0.95,
+        metalness: 0.1
+      });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      const gridHelper = new THREE.GridHelper(90, 45, 0xeab308, 0x1e293b);
+      gridHelper.position.y = 0.02;
+      scene.add(gridHelper);
+
+      // 7. Master Root Group
+      craneRoot = new THREE.Group();
+      scene.add(craneRoot);
+
+      // Build assemblies
+      buildChassis();
+      buildSuperstructureAndPivots();
+      buildExtendableBoom();
+      buildHookAndWeight();
+
+      // Trigger initial kinematic update
+      updateKinematics();
+
+      // Window resize
+      window.addEventListener('resize', onWindowResize, false);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+  </script>
+
+  <script>
+    const tipWorldPos = new THREE.Vector3();
+    const hingeWorldPos = new THREE.Vector3();
+    const cylBaseWorldPos = new THREE.Vector3();
+    const cylMountWorldPos = new THREE.Vector3();
+
+    function updateKinematics() {
+      // 1. Slewing: Rotate superstructure along vertical Y axis
+      const slewRad = (slewAngleDeg * Math.PI) / 180;
+      slewingRingGroup.rotation.y = slewRad;
+
+      // 2. Pitch: Rotate boom elevation along local X axis at the hinge pin
+      const pitchRad = (boomPitchDeg * Math.PI) / 180;
+      boomBaseHingeGroup.rotation.x = -pitchRad;
+
+      // 3. Telescopic Extension: Slide sections along local +Z axis
+      // Extension scale factor varies from 1.0 (retracted) to 2.6 (fully extended)
+      const extensionOffset = (telescopicExtension - 1.0) * 4.2;
+      boomSection2.position.z = extensionOffset * 0.5;
+      boomSection3.position.z = extensionOffset * 0.5;
+
+      // 4. Update scene matrix so world coordinates are accurate for cable and cylinder
+      craneRoot.updateMatrixWorld(true);
+
+      // 5. Align Hydraulic Elevation Cylinder
+      // Base mount on superstructure
+      const cylBaseLocal = new THREE.Vector3(0, 0.4, 0.4);
+      cylBaseWorldPos.copy(cylBaseLocal);
+      superstructureGroup.localToWorld(cylBaseWorldPos);
+
+      // Boom attach mount on the underside of boom base section
+      const cylMountLocal = new THREE.Vector3(0, -0.6, 3.2);
+      cylMountWorldPos.copy(cylMountLocal);
+      boomBaseHingeGroup.localToWorld(cylMountWorldPos);
+
+      // Position barrel at base mount
+      hydraulicBarrel.position.copy(cylBaseLocal);
+      // Orient cylinder towards the boom attach mount
+      const targetInSuper = cylMountWorldPos.clone();
+      superstructureGroup.worldToLocal(targetInSuper);
+      hydraulicBarrel.lookAt(targetInSuper);
+      hydraulicBarrel.rotateX(Math.PI / 2); // Cylinder default points along Y
+
+      // Length between cylinder pins
+      const cylLength = cylBaseWorldPos.distanceTo(cylMountWorldPos);
+      hydraulicRod.position.y = (cylLength - 1.6);
+
+      // 6. Cable and Hook Suspension
+      // Find exact world position of the boom tip sheaves
+      boomTipGroup.getWorldPosition(tipWorldPos);
+      // Offset sheave exit forward slightly
+      tipWorldPos.y += 0.2;
+
+      // Position hook block directly underneath the tip at user-selected cable drop distance
+      const hookTargetY = Math.max(1.8, tipWorldPos.y - cableDropLength);
+      hookBlockGroup.position.set(tipWorldPos.x, hookTargetY, tipWorldPos.z);
+
+      // Update cable line geometry to stretch between tip and hook block
+      const cablePositions = cableLine.geometry.attributes.position;
+      cablePositions.setXYZ(0, tipWorldPos.x, tipWorldPos.y, tipWorldPos.z);
+      cablePositions.setXYZ(1, tipWorldPos.x, hookTargetY + 0.6, tipWorldPos.z);
+      cablePositions.needsUpdate = true;
+
+      // 7. Update Realtime Telemetry
+      const slewingCenter = new THREE.Vector3(0, SLEWING_PIVOT_Y, SLEWING_PIVOT_Z);
+      const horizontalDist = Math.sqrt(
+        Math.pow(tipWorldPos.x - slewingCenter.x, 2) + 
+        Math.pow(tipWorldPos.z - slewingCenter.z, 2)
+      );
+      document.getElementById('stat-radius').textContent = horizontalDist.toFixed(1) + ' m';
+      document.getElementById('stat-height').textContent = hookTargetY.toFixed(1) + ' m';
+
+      // Estimated nominal safe working load based on working radius (tipping moment)
+      const safeLoad = Math.max(5.0, (180 / (horizontalDist + 2.5))).toFixed(1);
+      document.getElementById('stat-load').textContent = safeLoad + ' T';
+    }
+  </script>
+
+  <script>
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const text = document.getElementById('toast-text');
+      text.textContent = msg;
+      toast.classList.remove('opacity-0', 'translate-y-3');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-3');
+      }, 2200);
+    }
+
+    function setupEventListeners() {
+      // 1. Slewing Slider
+      const sliderSlew = document.getElementById('slider-slew');
+      const valSlew = document.getElementById('val-slew');
+      sliderSlew.addEventListener('input', (e) => {
+        slewAngleDeg = parseFloat(e.target.value);
+        valSlew.textContent = slewAngleDeg + '°';
+        updateKinematics();
+      });
+
+      // 2. Pitch Slider
+      const sliderPitch = document.getElementById('slider-pitch');
+      const valPitch = document.getElementById('val-pitch');
+      sliderPitch.addEventListener('input', (e) => {
+        boomPitchDeg = parseFloat(e.target.value);
+        valPitch.textContent = boomPitchDeg + '°';
+        updateKinematics();
+      });
+
+      // 3. Extend Slider
+      const sliderExtend = document.getElementById('slider-extend');
+      const valExtend = document.getElementById('val-extend');
+      sliderExtend.addEventListener('input', (e) => {
+        telescopicExtension = parseFloat(e.target.value);
+        const approxMeters = (8.0 + (telescopicExtension - 1.0) * 8.4).toFixed(1);
+        valExtend.textContent = `${telescopicExtension.toFixed(2)}x (${approxMeters}m)`;
+        updateKinematics();
+      });
+
+      // 4. Cable Winch Slider
+      const sliderCable = document.getElementById('slider-cable');
+      const valCable = document.getElementById('val-cable');
+      sliderCable.addEventListener('input', (e) => {
+        cableDropLength = parseFloat(e.target.value);
+        valCable.textContent = cableDropLength.toFixed(1) + ' m';
+        updateKinematics();
+      });
+
+      // Toggle Pivots
+      document.getElementById('toggle-pivots').addEventListener('change', (e) => {
+        pivotMarkersGroup.visible = e.target.checked;
+        showToast(e.target.checked ? 'Puntos de pivote activados' : 'Puntos de pivote ocultados');
+      });
+
+      // Toggle Outriggers
+      document.getElementById('toggle-outriggers').addEventListener('change', (e) => {
+        outriggersGroup.visible = e.target.checked;
+        showToast(e.target.checked ? 'Estabilizadores visibles' : 'Estabilizadores ocultos');
+      });
+
+      // Toggle Cylinder
+      document.getElementById('toggle-cylinder').addEventListener('change', (e) => {
+        hydraulicBarrel.visible = e.target.checked;
+      });
+
+      // Presets
+      document.getElementById('preset-transport').addEventListener('click', () => {
+        slewAngleDeg = 0;
+        boomPitchDeg = 6;
+        telescopicExtension = 1.0;
+        cableDropLength = 2.5;
+
+        syncSliders();
+        updateKinematics();
+        showToast('Configuración: Transporte en ruta');
+      });
+
+      document.getElementById('preset-working').addEventListener('click', () => {
+        slewAngleDeg = 45;
+        boomPitchDeg = 45;
+        telescopicExtension = 1.8;
+        cableDropLength = 7.0;
+
+        syncSliders();
+        updateKinematics();
+        showToast('Configuración: Trabajo estándar');
+      });
+
+      document.getElementById('preset-reach').addEventListener('click', () => {
+        slewAngleDeg = -65;
+        boomPitchDeg = 70;
+        telescopicExtension = 2.6;
+        cableDropLength = 12.0;
+
+        syncSliders();
+        updateKinematics();
+        showToast('Configuración: Alcance máximo');
+      });
+
+      // Demo Toggle
+      const btnDemo = document.getElementById('btn-toggle-demo');
+      const demoIcon = document.getElementById('demo-icon');
+      const demoText = document.getElementById('demo-text');
+      btnDemo.addEventListener('click', () => {
+        isDemoRunning = !isDemoRunning;
+        if (isDemoRunning) {
+          demoIcon.classList.replace('fa-play', 'fa-pause');
+          demoText.textContent = 'Pausar Demo';
+          btnDemo.classList.replace('bg-amber-500/20', 'bg-emerald-500/20');
+          btnDemo.classList.replace('text-amber-300', 'text-emerald-300');
+          showToast('Demostración automática activada');
+        } else {
+          demoIcon.classList.replace('fa-pause', 'fa-play');
+          demoText.textContent = 'Demo Automática';
+          btnDemo.classList.replace('bg-emerald-500/20', 'bg-amber-500/20');
+          btnDemo.classList.replace('text-emerald-300', 'text-amber-300');
+          showToast('Demostración pausada');
+        }
+      });
+
+      // Reset Camera
+      document.getElementById('btn-reset-cam').addEventListener('click', () => {
+        camera.position.set(-22, 14, 25);
+        controls.target.set(0, 6.0, 0);
+        controls.update();
+        showToast('Cámara reajustada');
+      });
+
+      // Mobile Menu Toggle
+      const togglePanelBtn = document.getElementById('btn-toggle-panel');
+      const mainPanel = document.getElementById('main-panel');
+      togglePanelBtn.addEventListener('click', () => {
+        const isHidden = mainPanel.classList.contains('translate-x-full');
+        if (isHidden) {
+          mainPanel.classList.remove('translate-x-full');
+          mainPanel.classList.add('translate-x-0');
+        } else {
+          mainPanel.classList.remove('translate-x-0');
+          mainPanel.classList.add('translate-x-full');
+        }
+      });
+    }
+
+    function syncSliders() {
+      document.getElementById('slider-slew').value = slewAngleDeg;
+      document.getElementById('val-slew').textContent = slewAngleDeg + '°';
+
+      document.getElementById('slider-pitch').value = boomPitchDeg;
+      document.getElementById('val-pitch').textContent = boomPitchDeg + '°';
+
+      document.getElementById('slider-extend').value = telescopicExtension;
+      const approxMeters = (8.0 + (telescopicExtension - 1.0) * 8.4).toFixed(1);
+      document.getElementById('val-extend').textContent = `${telescopicExtension.toFixed(2)}x (${approxMeters}m)`;
+
+      document.getElementById('slider-cable').value = cableDropLength;
+      document.getElementById('val-cable').textContent = cableDropLength.toFixed(1) + ' m';
+    }
+  </script>
+
+  <script>
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();
+
+      // Automated Kinematic Demo sequence
+      if (isDemoRunning) {
+        demoTime += delta * 0.7;
+
+        // Smooth sinusoidal slewing
+        slewAngleDeg = Math.sin(demoTime * 0.8) * 90;
+
+        // Smooth elevation boom pitch
+        boomPitchDeg = 35 + Math.sin(demoTime * 1.2) * 28;
+
+        // Smooth telescopic extension
+        telescopicExtension = 1.0 + (0.5 + 0.5 * Math.sin(demoTime * 0.6)) * 1.55;
+
+        // Oscillating cable winch
+        cableDropLength = 4.0 + (0.5 + 0.5 * Math.sin(demoTime * 0.9)) * 6.5;
+
+        syncSliders();
+        updateKinematics();
+      }
+
+      // Subtle pulse on pivot point indicators
+      if (pivotMarkersGroup && pivotMarkersGroup.visible) {
+        const scalePulse = 1.0 + Math.sin(clock.getElapsedTime() * 4.0) * 0.12;
+        pivotMarkersGroup.children.forEach(child => {
+          if (child.isMesh && child.geometry.type === 'SphereGeometry') {
+            child.scale.set(scalePulse, scalePulse, scalePulse);
+          }
+        });
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // Launch application after window load
+    window.onload = function () {
+      initThree();
+      setupEventListeners();
+      animate();
+    };
+  </script>
+</body>
+</html>

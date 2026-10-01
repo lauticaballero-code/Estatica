@@ -1,0 +1,1851 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador 3D - Presa Hidráulica y Momento de Vuelco</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Three.js and OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      overflow: hidden;
+      background-color: #070d18;
+      color: #f3f4f6;
+    }
+    .mono-font {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(14, 165, 233, 0.4);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(14, 165, 233, 0.8);
+    }
+    .glassmorphism {
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6);
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      height: 6px;
+      border-radius: 9999px;
+      background: #334155;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #0284c7;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(2, 132, 199, 0.8);
+      transition: transform 0.15s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.9; }
+      50% { transform: scale(1.25); opacity: 0.3; }
+      100% { transform: scale(0.95); opacity: 0.9; }
+    }
+    .pivot-glow {
+      animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+  </style>
+</head>
+
+<body class="h-full w-full select-none overflow-hidden relative">
+
+  <!-- 3D Canvas Container -->
+  <div id="canvas-container" class="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing z-0">
+    <canvas id="dam-canvas" class="w-full h-full block"></canvas>
+  </div>
+
+  <!-- Header Section -->
+  <header class="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none z-10">
+    <div class="glassmorphism pointer-events-auto px-4 py-2.5 rounded-2xl flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-700 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+        <i class="fa-solid fa-water text-white text-lg"></i>
+      </div>
+      <div>
+        <h1 class="text-sm font-bold tracking-wide text-white flex items-center gap-2">
+          PRESA DE GRAVEDAD 3D
+          <span class="text-[10px] bg-cyan-500/20 text-cyan-300 font-semibold px-2 py-0.5 rounded-full border border-cyan-500/40">Hidráulica & Estabilidad</span>
+        </h1>
+        <p class="text-xs text-gray-400">Ondulación del fluido, empuje hidrostático y punto de vuelco</p>
+      </div>
+    </div>
+
+    <!-- Quick action buttons -->
+    <div class="glassmorphism pointer-events-auto px-3 py-2 rounded-2xl flex items-center gap-2">
+      <button id="btn-lateral-view" title="Alinear Vista al Corte Lateral" class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold border border-amber-500/40 transition">
+        <i class="fa-solid fa-shapes text-xs"></i>
+        <span>Corte Lateral</span>
+      </button>
+
+      <button id="btn-ai-auditor" class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-500/30 to-indigo-500/30 hover:from-purple-500/40 hover:to-indigo-500/40 text-purple-300 text-xs font-semibold border border-purple-500/40 transition shadow-lg shadow-purple-500/10">
+        <i class="fa-solid fa-wand-magic-sparkles text-xs text-purple-300 animate-pulse"></i>
+        <span>Auditor IA</span>
+      </button>
+
+      <button id="btn-toggle-flow" class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs font-semibold border border-cyan-500/40 transition">
+        <i id="flow-icon" class="fa-solid fa-water text-xs"></i>
+        <span id="flow-text">Aliviadero Activo</span>
+      </button>
+
+      <button id="btn-reset-cam" title="Restablecer Vista" class="w-8 h-8 rounded-xl flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-800 transition">
+        <i class="fa-solid fa-camera-rotate text-xs"></i>
+      </button>
+
+      <button id="btn-toggle-panel" title="Mostrar/Ocultar Menú" class="w-8 h-8 rounded-xl flex items-center justify-center text-cyan-400 hover:bg-gray-800 transition">
+        <i class="fa-solid fa-sliders text-xs"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Interactive Controls Side Panel -->
+  <aside id="main-panel" class="absolute top-20 right-4 w-84 sm:w-96 glassmorphism rounded-3xl p-5 overflow-y-auto max-h-[calc(100vh-6rem)] flex flex-col gap-4 z-20 transition-all duration-300 transform translate-x-0">
+    
+    <!-- Realtime Stability & Safety Factor Meter -->
+    <div class="bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-semibold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+          <i class="fa-solid fa-shield-halved text-emerald-400"></i> Factor de Seguridad al Vuelco
+        </span>
+        <span id="stat-fs" class="text-base font-bold mono-font text-emerald-400">FS = 2.45</span>
+      </div>
+      
+      <!-- Progress / Threshold bar -->
+      <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
+        <div id="fs-bar" class="bg-emerald-500 h-full rounded-full transition-all duration-300" style="width: 75%;"></div>
+      </div>
+      <div class="flex justify-between text-[10px] text-gray-400 mt-1 mono-font">
+        <span>Colapso (&lt;1.0)</span>
+        <span>Límite Crítico (1.5)</span>
+        <span>Seguro (&gt;2.0)</span>
+      </div>
+      <p id="fs-status-desc" class="text-[11px] text-emerald-300/90 mt-2">Estado estructural: Estable y seguro. El momento estabilizador supera holgadamente al momento volcador.</p>
+    </div>
+
+    <!-- Live Momenta & Force Telemetry -->
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div class="bg-slate-900/80 p-2.5 rounded-2xl border border-slate-800">
+        <span class="block text-gray-400 text-[10px] uppercase font-semibold">Momento Estabilizador (Ms)</span>
+        <span id="stat-ms" class="text-emerald-400 font-bold text-xs mono-font">38,500 kNm/m</span>
+        <span class="block text-[9px] text-gray-400 mt-0.5">Peso propio del hormigón</span>
+      </div>
+      <div class="bg-slate-900/80 p-2.5 rounded-2xl border border-slate-800">
+        <span class="block text-gray-400 text-[10px] uppercase font-semibold">Momento Volcador (Mv)</span>
+        <span id="stat-mv" class="text-red-400 font-bold text-xs mono-font">15,700 kNm/m</span>
+        <span class="block text-[9px] text-gray-400 mt-0.5">Presión hidrostática + subpresión</span>
+      </div>
+    </div>
+
+    <!-- Active Hydraulic & Fluid Controls -->
+    <div class="space-y-3.5 border-t border-slate-800 pt-3">
+      <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+        <i class="fa-solid fa-water-ladder text-cyan-400"></i> Parámetros del Embalse
+      </h3>
+
+      <!-- Water Height -->
+      <div>
+        <div class="flex justify-between text-xs mb-1.5">
+          <span class="text-gray-300 flex items-center gap-1.5"><i class="fa-solid fa-arrows-up-down text-cyan-400"></i> Nivel del Agua (Cota)</span>
+          <span id="val-water-level" class="mono-font text-cyan-400 font-medium">17.0 m (85%)</span>
+        </div>
+        <input type="range" id="slider-water-level" min="4" max="21" step="0.2" value="17" class="w-full">
+      </div>
+
+      <!-- Wave Agitation / Motion Intensity -->
+      <div>
+        <div class="flex justify-between text-xs mb-1.5">
+          <span class="text-gray-300 flex items-center gap-1.5"><i class="fa-solid fa-wind text-indigo-400"></i> Agitación y Oleaje del Fluido</span>
+          <span id="val-wave-speed" class="mono-font text-indigo-400 font-medium">Medio (1.0x)</span>
+        </div>
+        <input type="range" id="slider-wave-speed" min="0.2" max="2.5" step="0.1" value="1.0" class="w-full">
+      </div>
+
+      <!-- Uplift Water Pressure Under Base (Subpresión) -->
+      <div>
+        <div class="flex justify-between text-xs mb-1.5">
+          <span class="text-gray-300 flex items-center gap-1.5"><i class="fa-solid fa-arrow-up-from-bracket text-amber-400"></i> Subpresión en la Base</span>
+          <span id="val-uplift" class="mono-font text-amber-400 font-medium">60% (Drenada)</span>
+        </div>
+        <input type="range" id="slider-uplift" min="0.0" max="1.0" step="0.05" value="0.6" class="w-full">
+      </div>
+    </div>
+
+    <!-- Force Vectors & Physical Diagram Toggles -->
+    <div class="border-t border-slate-800 pt-3 space-y-2">
+      <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+        <i class="fa-solid fa-diagram-project text-amber-400"></i> Vectores y Puntos Clave
+      </h3>
+
+      <label class="flex items-center justify-between text-xs text-gray-200 p-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800/80 cursor-pointer border border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full bg-red-500 shadow-md shadow-red-500/80 inline-block"></span>
+          <div>
+            <span class="font-semibold block">Punto Pivote de Vuelco (Toe)</span>
+            <span class="text-[10px] text-gray-400 block">Pie de aguas abajo (eje de rotación)</span>
+          </div>
+        </div>
+        <input type="checkbox" id="toggle-pivot" checked class="w-4 h-4 accent-cyan-500 rounded">
+      </label>
+
+      <label class="flex items-center justify-between text-xs text-gray-200 p-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800/80 cursor-pointer border border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full bg-cyan-400 shadow-md shadow-cyan-400/80 inline-block"></span>
+          <div>
+            <span class="font-semibold block">Prisma de Presión Hidrostática</span>
+            <span class="text-[10px] text-gray-400 block">Distribución triangular y resultante en h/3</span>
+          </div>
+        </div>
+        <input type="checkbox" id="toggle-pressure" checked class="w-4 h-4 accent-cyan-500 rounded">
+      </label>
+
+      <label class="flex items-center justify-between text-xs text-gray-200 p-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800/80 cursor-pointer border border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-md shadow-emerald-500/80 inline-block"></span>
+          <div>
+            <span class="font-semibold block">Vectores de Momentos (Ms vs Mv)</span>
+            <span class="text-[10px] text-gray-400 block">Pesos propios y flechas de torsión</span>
+          </div>
+        </div>
+        <input type="checkbox" id="toggle-vectors" checked class="w-4 h-4 accent-cyan-500 rounded">
+      </label>
+
+      <label class="flex items-center justify-between text-xs text-gray-200 p-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800/80 cursor-pointer border border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full bg-yellow-400 shadow-md shadow-yellow-400/80 inline-block"></span>
+          <div>
+            <span class="font-semibold block">Plano de Sección Geológica</span>
+            <span class="text-[10px] text-gray-400 block">Corte transversal expuesto permanentemente</span>
+          </div>
+        </div>
+        <input type="checkbox" id="toggle-cutaway" checked class="w-4 h-4 accent-cyan-500 rounded">
+      </label>
+    </div>
+
+    <!-- Critical Scenarios / Test Modes -->
+    <div class="border-t border-slate-800 pt-3">
+      <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation text-amber-400"></i> Escenarios de Carga
+      </h3>
+      <div class="grid grid-cols-3 gap-1.5 text-xs">
+        <button id="scenario-normal" class="px-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-gray-200 border border-slate-700 transition flex flex-col items-center">
+          <i class="fa-solid fa-droplet text-cyan-400 text-xs mb-1"></i>
+          <span class="text-[10px]">Normal (14m)</span>
+        </button>
+        <button id="scenario-flood" class="px-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-gray-200 border border-slate-700 transition flex flex-col items-center">
+          <i class="fa-solid fa-cloud-showers-heavy text-amber-400 text-xs mb-1"></i>
+          <span class="text-[10px]">Crecida (19m)</span>
+        </button>
+        <button id="scenario-overturn" class="px-2 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-200 border border-red-800/60 transition flex flex-col items-center">
+          <i class="fa-solid fa-radiation text-red-400 text-xs mb-1"></i>
+          <span class="text-[10px]">Vuelco Crítico</span>
+        </button>
+      </div>
+
+      <!-- Quick AI Consult Trigger -->
+      <div class="mt-3 pt-3 border-t border-slate-800">
+        <button id="btn-quick-audit" class="w-full py-2.5 px-3 rounded-2xl bg-gradient-to-r from-indigo-600/30 to-purple-600/30 hover:from-indigo-600/50 hover:to-purple-600/50 border border-indigo-500/40 text-xs text-indigo-200 font-medium flex items-center justify-center gap-2 transition group">
+          <i class="fa-solid fa-microchip text-indigo-400 group-hover:scale-110 transition"></i>
+          <span>Auditoría Estructural con Gemini IA</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- AI Dam Safety Engineering Modal -->
+  <div id="ai-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-300">
+    <div class="glassmorphism w-full max-w-2xl max-h-[88vh] rounded-3xl p-6 flex flex-col border border-purple-500/30 shadow-2xl shadow-purple-950/50 overflow-hidden transform scale-95 transition-transform duration-300">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-4 border-b border-slate-800 shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/25">
+            <i class="fa-solid fa-brain text-white text-lg"></i>
+          </div>
+          <div>
+            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+              CONSULTOR DE SEGURIDAD DE PRESAS IA
+              <span class="text-[10px] bg-purple-500/20 text-purple-300 font-semibold px-2 py-0.5 rounded-full border border-purple-500/40">Gemini 3 Flash</span>
+            </h2>
+            <p class="text-xs text-gray-400">Diagnóstico geotécnico, escenarios de crecida y briefing sonoro en tiempo real</p>
+          </div>
+        </div>
+        <button id="btn-close-ai-modal" class="w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-slate-800 transition">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <!-- AI Tabs -->
+      <div class="flex items-center gap-2 pt-3 shrink-0">
+        <button id="tab-audit" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-500/30 text-purple-200 border border-purple-500/50 transition">
+          <i class="fa-solid fa-clipboard-check mr-1.5"></i>Dictamen Técnico
+        </button>
+        <button id="tab-scenario" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800/60 text-gray-300 hover:bg-slate-800 border border-slate-700 transition">
+          <i class="fa-solid fa-bolt mr-1.5"></i>Generador de Crecidas IA
+        </button>
+        <button id="tab-qa" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800/60 text-gray-300 hover:bg-slate-800 border border-slate-700 transition">
+          <i class="fa-solid fa-comments mr-1.5"></i>Consulta Libre
+        </button>
+      </div>
+
+      <!-- Tab Content Area -->
+      <div class="flex-1 overflow-y-auto mt-4 pr-1 space-y-4">
+        
+        <!-- Tab 1: Audit & Diagnosis -->
+        <div id="view-audit" class="space-y-4">
+          <div class="bg-slate-900/90 rounded-2xl p-4 border border-slate-800">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <span class="text-xs font-semibold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+                <i class="fa-solid fa-chart-line text-cyan-400"></i> Telemetría Enviada al Modelo
+              </span>
+              <button id="btn-run-audit" class="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-md shadow-purple-600/30">
+                <i class="fa-solid fa-rotate text-xs"></i>
+                <span>Generar Dictamen Actualizado</span>
+              </button>
+            </div>
+            
+            <div id="ai-telemetry-snapshot" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] mono-font text-gray-300 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/60">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Audit Output Container -->
+          <div class="bg-slate-900/90 rounded-2xl p-4 border border-slate-800 min-h-[160px] relative">
+            <div id="audit-loading" class="hidden absolute inset-0 bg-slate-950/80 rounded-2xl flex flex-col items-center justify-center gap-3 backdrop-blur-sm z-10">
+              <i class="fa-solid fa-atom fa-spin text-2xl text-purple-400"></i>
+              <span class="text-xs text-purple-300 animate-pulse">Analizando equilibrio de momentos con Gemini...</span>
+            </div>
+            
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2">
+                <i class="fa-solid fa-file-contract text-emerald-400"></i> Informe Técnico Oficial
+              </h4>
+              <button id="btn-listen-tts" class="hidden px-2.5 py-1 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs font-medium border border-cyan-500/40 transition flex items-center gap-1.5">
+                <i id="tts-icon" class="fa-solid fa-volume-high"></i>
+                <span id="tts-btn-text">Escuchar Informe (TTS)</span>
+              </button>
+            </div>
+
+            <div id="audit-result-text" class="text-xs text-gray-300 leading-relaxed space-y-2">
+              <p class="text-gray-400 italic">Presiona el botón "Generar Dictamen Actualizado" para que la IA audite la estabilidad estructural de la presa frente al vuelco, presiones intersticiales y normas ICOLD.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: AI Scenario Generator (Structured Outputs) -->
+        <div id="view-scenario" class="hidden space-y-4">
+          <div class="bg-slate-900/90 rounded-2xl p-4 border border-slate-800 space-y-3">
+            <p class="text-xs text-gray-300">Solicita a Gemini que diseñe un evento hidrológico o geotécnico extremo personalizado. El modelo retornará parámetros de simulación exactos que se aplicarán en vivo al modelo 3D.</p>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button data-type="pmp" class="preset-scenario-ai px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-gray-200 border border-slate-700 text-left transition">
+                <span class="font-bold block text-amber-400"><i class="fa-solid fa-cloud-bolt mr-1"></i>Crecida Milenaria</span>
+                <span class="text-[10px] text-gray-400">PMP extrema con aliviadero bloqueado</span>
+              </button>
+              <button data-type="uplift_failure" class="preset-scenario-ai px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-gray-200 border border-slate-700 text-left transition">
+                <span class="font-bold block text-rose-400"><i class="fa-solid fa-water-ladder mr-1"></i>Fallo de Drenes</span>
+                <span class="text-[10px] text-gray-400">Subpresión al 100% y colmatación</span>
+              </button>
+              <button data-type="rapid_drawdown" class="preset-scenario-ai px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-gray-200 border border-slate-700 text-left transition">
+                <span class="font-bold block text-cyan-400"><i class="fa-solid fa-arrow-down-up-across-line mr-1"></i>Desembalse Rápido</span>
+                <span class="text-[10px] text-gray-400">Apertura total de descarga de fondo</span>
+              </button>
+            </div>
+
+            <div class="flex gap-2 pt-1">
+              <input id="custom-scenario-input" type="text" placeholder="O escribe tu propio evento: Ej. 'Terremoto con oleaje de resonancia y compuertas atascadas'" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-purple-500">
+              <button id="btn-generate-scenario" class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center gap-1.5 transition shrink-0">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>Generar</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Scenario Result Card -->
+          <div id="scenario-result-box" class="hidden bg-slate-900/90 rounded-2xl p-4 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div>
+                <span id="scenario-title" class="text-sm font-bold text-amber-400">Nombre del Escenario</span>
+                <p id="scenario-desc" class="text-xs text-gray-300 mt-1"></p>
+              </div>
+              <button id="btn-apply-scenario" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-lg shadow-emerald-600/30">
+                <i class="fa-solid fa-play text-xs"></i>
+                <span>Aplicar a la Presa 3D</span>
+              </button>
+            </div>
+            
+            <div class="grid grid-cols-3 gap-2 text-center text-xs mono-font">
+              <div class="bg-slate-950 p-2 rounded-xl border border-slate-800">
+                <span class="text-[10px] text-gray-400 block font-sans">Nivel Agua Previsto</span>
+                <span id="scenario-water" class="text-cyan-400 font-bold">--</span>
+              </div>
+              <div class="bg-slate-950 p-2 rounded-xl border border-slate-800">
+                <span class="text-[10px] text-gray-400 block font-sans">Subpresión Cimentación</span>
+                <span id="scenario-uplift" class="text-amber-400 font-bold">--</span>
+              </div>
+              <div class="bg-slate-950 p-2 rounded-xl border border-slate-800">
+                <span class="text-[10px] text-gray-400 block font-sans">Agitación Oleaje</span>
+                <span id="scenario-wave" class="text-indigo-400 font-bold">--</span>
+              </div>
+            </div>
+            <div id="scenario-actions" class="text-xs text-gray-300 bg-slate-950/70 p-3 rounded-xl border border-slate-800/70"></div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Free Q&A Assistant -->
+        <div id="view-qa" class="hidden space-y-4">
+          <div class="bg-slate-900/90 rounded-2xl p-4 border border-slate-800 space-y-3">
+            <p class="text-xs text-gray-300">Haz cualquier pregunta sobre hidrostática, estabilidad al vuelco de presas de gravedad, criterios de tercio medio o fórmulas aplicadas:</p>
+            <div class="flex gap-2">
+              <input id="qa-input" type="text" placeholder="Ej: ¿Por qué la resultante hidrostática actúa a H/3 y no en H/2?" class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-purple-500">
+              <button id="btn-send-qa" class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center gap-1.5 transition shrink-0">
+                <i class="fa-solid fa-paper-plane"></i>
+                <span>Consultar</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="qa-response-box" class="hidden bg-slate-900/90 rounded-2xl p-4 border border-slate-800 space-y-2">
+            <h4 class="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-2">
+              <i class="fa-solid fa-comment-dots text-purple-400"></i> Respuesta del Especialista
+            </h4>
+            <div id="qa-response-text" class="text-xs text-gray-300 leading-relaxed"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Audio Element for TTS -->
+      <audio id="tts-audio-player" class="hidden"></audio>
+
+      <!-- Modal Footer -->
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-between text-[11px] text-gray-400 shrink-0">
+        <span class="flex items-center gap-1.5"><i class="fa-solid fa-shield text-purple-400"></i> Análisis asistido por IA de Google Gemini</span>
+        <button id="btn-modal-close-footer" class="px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-gray-300 text-xs transition">Cerrar</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Instructions Footer -->
+  <footer class="absolute bottom-4 left-4 glassmorphism px-4 py-2 rounded-2xl hidden md:flex items-center gap-4 text-xs text-gray-400 pointer-events-none z-10">
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-computer-mouse text-cyan-400"></i> Clic y Arrastre: Rotar cámara</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass-plus text-cyan-400"></i> Rueda: Zoom</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-hand text-cyan-400"></i> Clic derecho: Paneo</span>
+  </footer>
+
+  <!-- Toast Notification Modal -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 glassmorphism px-5 py-2.5 rounded-full text-xs font-medium text-white shadow-xl opacity-0 pointer-events-none transition-all duration-300 transform translate-y-3 z-50 flex items-center gap-2">
+    <i class="fa-solid fa-circle-check text-cyan-400"></i>
+    <span id="toast-text">Vista actualizada</span>
+  </div>
+
+  <script>
+    /* Global Simulation State */
+    let scene, camera, renderer, controls;
+    let masterRoot, damAssemblyGroup, damMeshGroup;
+    let waterMesh, waterGeometry, waterMaterial;
+    let canyonGroup, spillwayJetsGroup;
+    let pivotMarkerGroup, pressureDiagramGroup, momentVectorsGroup;
+
+    // Dam Dimensional Constants
+    const DAM_HEIGHT = 20.0;     // H = 20 m
+    const DAM_CREST_W = 3.5;     // b = 3.5 m en coronación
+    const DAM_BASE_W = 15.0;     // B = 15.0 m en cimientos
+    const DAM_LENGTH = 32.0;     // L = 32 m de estribo a estribo
+    const DENSITY_CONCRETE = 24.0; // kN/m3
+    const DENSITY_WATER = 9.81;    // kN/m3
+
+    // Simulation Parameters
+    let waterHeight = 17.0;       // Upstream reservoir level (m)
+    let waveAgitation = 1.0;      // Wave speed multiplier
+    let upliftRatio = 0.6;        // Subpresión factor (0 to 1)
+    let isSpillwayOpen = true;    // Discharge chutes
+    let simulateFailureTilt = false;
+    let currentTiltAngle = 0.0;
+
+    // Materials
+    let matConcrete, matDamFace, matRock, matSpillway;
+
+    // Procedural Concrete Texture Generator
+    function createConcreteDamTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      // Heavy gray weathered concrete
+      ctx.fillStyle = '#64748b';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Noise grains
+      for (let i = 0; i < 45000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const c = 85 + Math.floor(Math.random() * 45);
+        ctx.fillStyle = `rgb(${c}, ${c}, ${c})`;
+        ctx.fillRect(x, y, 2, 2);
+      }
+
+      // Horizontal formwork lift joints (juntas de colado)
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 3;
+      for (let y = 64; y < 512; y += 64) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(512, y);
+        ctx.stroke();
+      }
+
+      // Vertical water runoff stains
+      for (let x = 30; x < 512; x += 70) {
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.25)';
+        ctx.fillRect(x + (Math.random() * 10 - 5), 0, 18, 512);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    }
+
+    // Canyon Rocky Texture Generator
+    function createRockTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(0, 0, 512, 512);
+
+      for (let i = 0; i < 50000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const v = Math.random();
+        ctx.fillStyle = v > 0.5 ? '#1e293b' : '#475569';
+        ctx.fillRect(x, y, 3, 3);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    }
+  </script>
+
+  <script>
+    function buildConcreteDam() {
+      damAssemblyGroup = new THREE.Group();
+
+      const concreteTex = createConcreteDamTexture();
+      concreteTex.repeat.set(2, 2);
+
+      matConcrete = new THREE.MeshStandardMaterial({
+        map: concreteTex,
+        roughness: 0.82,
+        metalness: 0.15
+      });
+
+      matDamFace = new THREE.MeshStandardMaterial({
+        color: 0x475569,
+        roughness: 0.7,
+        metalness: 0.2
+      });
+
+      matSpillway = new THREE.MeshStandardMaterial({
+        color: 0x334155,
+        roughness: 0.5,
+        metalness: 0.4
+      });
+
+      damMeshGroup = new THREE.Group();
+
+      // Extruded Cross Section of Gravity Dam
+      // Coordinate System of Profile:
+      // X = 0 is Downstream Toe (Punto de vuelco O)
+      // X = -DAM_BASE_W (-15m) is Upstream Heel (Talón de aguas arriba)
+      // Y = 0 is the base rock foundation
+      // Y = DAM_HEIGHT (20m) is the crest
+      const damShape = new THREE.Shape();
+      damShape.moveTo(0, 0); // Downstream Toe (Pivot Point)
+      damShape.lineTo(-DAM_BASE_W, 0); // Base to Upstream Heel
+      damShape.lineTo(-DAM_BASE_W, DAM_HEIGHT); // Upstream Vertical Face
+      damShape.lineTo(-DAM_BASE_W + DAM_CREST_W, DAM_HEIGHT); // Crest width
+      damShape.lineTo(0, 0); // Downstream Sloped Face (hipotenusa)
+      damShape.closePath();
+
+      const extrudeSettings = {
+        steps: 1,
+        depth: DAM_LENGTH,
+        bevelEnabled: true,
+        bevelThickness: 0.25,
+        bevelSize: 0.25,
+        bevelSegments: 2
+      };
+
+      const damGeo = new THREE.ExtrudeGeometry(damShape, extrudeSettings);
+      damGeo.center(); // Center Z along dam length
+      const damMesh = new THREE.Mesh(damGeo, matConcrete);
+      damMesh.castShadow = true;
+      damMesh.receiveShadow = true;
+      // Adjust geometry translation so local origin (0,0,0) matches Downstream Toe (X=0, Y=0)
+      damMesh.position.set(-DAM_BASE_W / 2, DAM_HEIGHT / 2, 0);
+      damMeshGroup.add(damMesh);
+
+      // Crest roadway & safety parapet walls
+      const roadwayGeo = new THREE.BoxGeometry(DAM_CREST_W + 0.4, 0.4, DAM_LENGTH);
+      const roadway = new THREE.Mesh(roadwayGeo, matSpillway);
+      roadway.position.set(-DAM_BASE_W + DAM_CREST_W / 2, DAM_HEIGHT + 0.2, 0);
+      roadway.castShadow = true;
+      damMeshGroup.add(roadway);
+
+      // Spillway Crest Gates (Aliviadero de compuertas radiales centrales)
+      const gateWidth = 9.0;
+      const gatePierGeo = new THREE.BoxGeometry(1.2, 3.2, 1.2);
+      const pierLeft = new THREE.Mesh(gatePierGeo, matConcrete);
+      pierLeft.position.set(-DAM_BASE_W + DAM_CREST_W / 2, DAM_HEIGHT + 1.6, -gateWidth / 2);
+      const pierRight = new THREE.Mesh(gatePierGeo, matConcrete);
+      pierRight.position.set(-DAM_BASE_W + DAM_CREST_W / 2, DAM_HEIGHT + 1.6, gateWidth / 2);
+      damMeshGroup.add(pierLeft);
+      damMeshGroup.add(pierRight);
+
+      // Stilling Basin / Cuenco amortiguador downstream
+      const basinGeo = new THREE.BoxGeometry(16.0, 0.6, DAM_LENGTH);
+      const basinMesh = new THREE.Mesh(basinGeo, matConcrete);
+      basinMesh.position.set(8.0, 0.3, 0);
+      basinMesh.receiveShadow = true;
+      damMeshGroup.add(basinMesh);
+
+      // End sill tooth (Diente disipador)
+      const sillGeo = new THREE.BoxGeometry(1.2, 1.4, DAM_LENGTH);
+      const sillMesh = new THREE.Mesh(sillGeo, matConcrete);
+      sillMesh.position.set(15.4, 1.0, 0);
+      damMeshGroup.add(sillMesh);
+
+      damAssemblyGroup.add(damMeshGroup);
+      masterRoot.add(damAssemblyGroup);
+    }
+  </script>
+
+  <script>
+    function buildCanyonAndReservoir() {
+      // 1. Canyon Valley Abutment (Se elimina el bloque lateral frontal cliffLeft para exponer el corte transversal)
+      canyonGroup = new THREE.Group();
+      const rockTex = createRockTexture();
+      rockTex.repeat.set(4, 4);
+
+      matRock = new THREE.MeshStandardMaterial({
+        map: rockTex,
+        roughness: 0.9,
+        metalness: 0.1
+      });
+
+      // Se conserva únicamente el estribo rocoso del fondo (Right Canyon Cliff)
+      const cliffGeo = new THREE.BoxGeometry(45.0, 26.0, 16.0);
+      const cliffRight = new THREE.Mesh(cliffGeo, matRock);
+      cliffRight.position.set(-10.0, 13.0, -(DAM_LENGTH / 2) - 8.0);
+      cliffRight.receiveShadow = true;
+      canyonGroup.add(cliffRight);
+
+      // Foundation Bedrock Floor (Lecho rocoso de apoyo)
+      const floorGeo = new THREE.PlaneGeometry(90, 80);
+      const floorMesh = new THREE.Mesh(floorGeo, matRock);
+      floorMesh.rotation.x = -Math.PI / 2;
+      floorMesh.position.set(0, 0, 0);
+      floorMesh.receiveShadow = true;
+      canyonGroup.add(floorMesh);
+
+      masterRoot.add(canyonGroup);
+
+      // 2. Upstream Water Fluid Mesh (Embalse de agua con perfil visible en el corte)
+      const resLengthX = 30.0;
+      const resWidthZ = DAM_LENGTH - 0.2;
+      waterGeometry = new THREE.PlaneGeometry(resLengthX, resWidthZ, 64, 48);
+      waterGeometry.rotateX(-Math.PI / 2);
+
+      waterMaterial = new THREE.MeshPhysicalMaterial({
+        color: 0x0284c7,
+        emissive: 0x0369a1,
+        emissiveIntensity: 0.2,
+        metalness: 0.1,
+        roughness: 0.15,
+        transmission: 0.75,
+        transparent: true,
+        opacity: 0.88,
+        ior: 1.333,
+        side: THREE.DoubleSide
+      });
+
+      waterMesh = new THREE.Mesh(waterGeometry, waterMaterial);
+      waterMesh.position.set(-DAM_BASE_W - (resLengthX / 2), waterHeight, 0);
+      masterRoot.add(waterMesh);
+
+      // Deep water body volume underneath surface
+      const deepGeo = new THREE.BoxGeometry(resLengthX, waterHeight, resWidthZ);
+      const deepMat = new THREE.MeshStandardMaterial({
+        color: 0x075985,
+        transparent: true,
+        opacity: 0.5,
+        roughness: 0.3
+      });
+      const deepBodyMesh = new THREE.Mesh(deepGeo, deepMat);
+      deepBodyMesh.position.set(-DAM_BASE_W - (resLengthX / 2), waterHeight / 2, 0);
+      masterRoot.add(deepBodyMesh);
+      waterMesh.userData.deepBody = deepBodyMesh;
+
+      // 3. Spillway Discharge Jets & Splash Foam
+      spillwayJetsGroup = new THREE.Group();
+
+      const chuteGeo = new THREE.PlaneGeometry(8.0, 24.0, 20, 20);
+      const chuteAngle = Math.atan2(DAM_HEIGHT, DAM_BASE_W - DAM_CREST_W);
+      chuteGeo.rotateX(Math.PI / 2);
+      chuteGeo.rotateZ(chuteAngle - (Math.PI / 2));
+
+      const chuteMat = new THREE.MeshStandardMaterial({
+        color: 0xe0f2fe,
+        transparent: true,
+        opacity: 0.8,
+        roughness: 0.1,
+        metalness: 0.2
+      });
+
+      const chuteMesh = new THREE.Mesh(chuteGeo, chuteMat);
+      chuteMesh.position.set(-3.5, 9.8, 0);
+      spillwayJetsGroup.add(chuteMesh);
+
+      const foamGeo = new THREE.BoxGeometry(7.0, 1.4, 10.0);
+      const foamMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.9,
+        transparent: true,
+        opacity: 0.85
+      });
+      const foamMesh = new THREE.Mesh(foamGeo, foamMat);
+      foamMesh.position.set(4.5, 0.8, 0);
+      spillwayJetsGroup.add(foamMesh);
+
+      masterRoot.add(spillwayJetsGroup);
+    }
+  </script>
+
+  <script>
+    function buildPhysicsOverlays() {
+      // 1. Pivot Point Marker (Downstream Toe / Pie de presa)
+      pivotMarkerGroup = new THREE.Group();
+
+      // Glowing Sphere at Toe (X = 0, Y = 0)
+      const pivotSphereGeo = new THREE.SphereGeometry(0.65, 24, 24);
+      const pivotSphereMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+      const pivotSphere = new THREE.Mesh(pivotSphereGeo, pivotSphereMat);
+      pivotSphere.position.set(0, 0, 0);
+      pivotMarkerGroup.add(pivotSphere);
+
+      // Pulsing Outer Ring around the Pivot Axis
+      const ringGeo = new THREE.RingGeometry(1.2, 1.5, 32);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xef4444, side: THREE.DoubleSide });
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.position.set(0, 0, 0);
+      ringMesh.rotation.y = Math.PI / 2;
+      pivotMarkerGroup.add(ringMesh);
+
+      // Curved Tendency Arc Arrow (Moment of Overturning Indicator Mv)
+      const arcPoints = [];
+      for (let a = 15; a <= 135; a += 5) {
+        const rad = (a * Math.PI) / 180;
+        arcPoints.push(new THREE.Vector3(Math.cos(rad) * 3.8, Math.sin(rad) * 3.8, 0));
+      }
+      const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints);
+      const arcMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 4 });
+      const arcLine = new THREE.Line(arcGeo, arcMat);
+      pivotMarkerGroup.add(arcLine);
+
+      // Arrowhead for the Overturning Arc
+      const headGeo = new THREE.ConeGeometry(0.35, 0.8, 16);
+      headGeo.rotateZ(-Math.PI / 3);
+      const headMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+      const headMesh = new THREE.Mesh(headGeo, headMat);
+      headMesh.position.copy(arcPoints[arcPoints.length - 1]);
+      pivotMarkerGroup.add(headMesh);
+
+      masterRoot.add(pivotMarkerGroup);
+
+      // 2. Hydrostatic Pressure Prism (Prisma Triangular de Empuje Hidrostático)
+      pressureDiagramGroup = new THREE.Group();
+      masterRoot.add(pressureDiagramGroup);
+
+      // 3. Moment Vectors & Center of Gravity (Ms & W)
+      momentVectorsGroup = new THREE.Group();
+      masterRoot.add(momentVectorsGroup);
+    }
+
+    function updatePressureAndVectors(fsData) {
+      // Clear previous arrows and lines
+      while (pressureDiagramGroup.children.length > 0) {
+        const obj = pressureDiagramGroup.children[0];
+        if (obj.geometry) obj.geometry.dispose();
+        pressureDiagramGroup.remove(obj);
+      }
+      while (momentVectorsGroup.children.length > 0) {
+        const obj = momentVectorsGroup.children[0];
+        if (obj.geometry) obj.geometry.dispose();
+        momentVectorsGroup.remove(obj);
+      }
+
+      const h = waterHeight;
+      const upstreamX = -DAM_BASE_W; // -15.0
+
+      // A. Triangular Hydrostatic Horizontal Force Arrows
+      const arrowSteps = 7;
+      const maxPressureLength = (h / DAM_HEIGHT) * 6.5;
+
+      for (let i = 1; i <= arrowSteps; i++) {
+        const frac = i / arrowSteps;
+        const currentY = h * (1.0 - frac);
+        const arrowLen = frac * maxPressureLength;
+
+        // Arrows push in +X direction against upstream vertical face
+        const dir = new THREE.Vector3(1, 0, 0);
+        const origin = new THREE.Vector3(upstreamX - arrowLen, currentY, 0);
+        const arrow = new THREE.ArrowHelper(dir, origin, arrowLen, 0x0284c7, 0.45, 0.28);
+        pressureDiagramGroup.add(arrow);
+      }
+
+      // Triangular bounding wireframe outline of pressure prism
+      const triPoints = [
+        new THREE.Vector3(upstreamX, h, 0),
+        new THREE.Vector3(upstreamX - maxPressureLength, 0, 0),
+        new THREE.Vector3(upstreamX, 0, 0),
+        new THREE.Vector3(upstreamX, h, 0)
+      ];
+      const triGeo = new THREE.BufferGeometry().setFromPoints(triPoints);
+      const triMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 });
+      const triLine = new THREE.Line(triGeo, triMat);
+      pressureDiagramGroup.add(triLine);
+
+      // Resultant Hydrostatic Thrust (Fh) acting at h/3 from base
+      const thrustY = h / 3.0;
+      const thrustLen = maxPressureLength * 1.35;
+      const thrustDir = new THREE.Vector3(1, 0, 0);
+      const thrustOrigin = new THREE.Vector3(upstreamX - thrustLen - 1.0, thrustY, 0);
+      const thrustArrow = new THREE.ArrowHelper(thrustDir, thrustOrigin, thrustLen + 1.0, 0xef4444, 0.8, 0.45);
+      pressureDiagramGroup.add(thrustArrow);
+
+      // Horizontal Thrust Action Line towards downstream toe
+      const actionPoints = [
+        new THREE.Vector3(upstreamX, thrustY, 0),
+        new THREE.Vector3(0, thrustY, 0)
+      ];
+      const actionGeo = new THREE.BufferGeometry().setFromPoints(actionPoints);
+      const actionLine = new THREE.Line(actionGeo, new THREE.LineDashedMaterial({
+        color: 0xf87171,
+        dashSize: 0.5,
+        gapSize: 0.3
+      }));
+      actionLine.computeLineDistances();
+      pressureDiagramGroup.add(actionLine);
+
+      // B. Subpresión (Uplift Under Dam Base)
+      if (upliftRatio > 0.05) {
+        const upliftHeight = upliftRatio * (h / DAM_HEIGHT) * 3.5;
+        const upliftSteps = 6;
+        for (let i = 0; i <= upliftSteps; i++) {
+          const frac = i / upliftSteps; // 0 at toe, 1 at heel
+          const px = -DAM_BASE_W * frac;
+          const uLen = frac * upliftHeight;
+          if (uLen > 0.1) {
+            const uDir = new THREE.Vector3(0, 1, 0);
+            const uOrigin = new THREE.Vector3(px, -uLen - 0.2, 0);
+            const uArrow = new THREE.ArrowHelper(uDir, uOrigin, uLen, 0xfacc15, 0.3, 0.2);
+            pressureDiagramGroup.add(uArrow);
+          }
+        }
+      }
+
+      // C. Self-Weight Vectors & Center of Gravity (Ms - Stabilizing Moment)
+      // CG coordinates of the composite dam section (Rectangle + Downstream Triangle)
+      const cg = fsData.cg;
+      const weightDir = new THREE.Vector3(0, -1, 0);
+      const weightOrigin = new THREE.Vector3(cg.x, cg.y + 4.0, 0);
+      const weightArrow = new THREE.ArrowHelper(weightDir, weightOrigin, 7.5, 0x10b981, 0.8, 0.45);
+      momentVectorsGroup.add(weightArrow);
+
+      // Moment Stabilizing Arm to Toe O
+      const armPoints = [
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(cg.x, 0, 0),
+        new THREE.Vector3(cg.x, cg.y, 0)
+      ];
+      const armGeo = new THREE.BufferGeometry().setFromPoints(armPoints);
+      const armLine = new THREE.Line(armGeo, new THREE.LineDashedMaterial({
+        color: 0x34d399,
+        dashSize: 0.4,
+        gapSize: 0.25
+      }));
+      armLine.computeLineDistances();
+      momentVectorsGroup.add(armLine);
+
+      // Stabilizing Rotational Arc at Toe (Ms)
+      const msArcPoints = [];
+      for (let a = 90; a >= 0; a -= 5) {
+        const rad = (a * Math.PI) / 180;
+        msArcPoints.push(new THREE.Vector3(-Math.cos(rad) * 2.8, Math.sin(rad) * 2.8, 0));
+      }
+      const msArcGeo = new THREE.BufferGeometry().setFromPoints(msArcPoints);
+      const msArcLine = new THREE.Line(msArcGeo, new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 3 }));
+      momentVectorsGroup.add(msArcLine);
+    }
+  </script>
+
+  <script>
+    function initThree() {
+      const container = document.getElementById('canvas-container');
+      const canvas = document.getElementById('dam-canvas');
+
+      // 1. Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x070d18);
+      scene.fog = new THREE.FogExp2(0x070d18, 0.012);
+
+      // 2. Camera
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(28, 22, 38);
+
+      // 3. Renderer
+      renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      // 4. OrbitControls
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxDistance = 150;
+      controls.minDistance = 6;
+      controls.target.set(-5, 9.0, 0);
+
+      // 5. Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+      scene.add(ambientLight);
+
+      // Bright Sun Light casting crisp structural shadows
+      const sunLight = new THREE.DirectionalLight(0xfffaed, 1.4);
+      sunLight.position.set(-25, 45, 30);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = 2048;
+      sunLight.shadow.mapSize.height = 2048;
+      sunLight.shadow.camera.near = 0.5;
+      sunLight.shadow.camera.far = 140;
+      sunLight.shadow.camera.left = -35;
+      sunLight.shadow.camera.right = 35;
+      sunLight.shadow.camera.top = 35;
+      sunLight.shadow.camera.bottom = -35;
+      sunLight.shadow.bias = -0.0004;
+      scene.add(sunLight);
+
+      // Cold Cyan Fill Light from river downstream
+      const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.45);
+      fillLight.position.set(30, 15, -20);
+      scene.add(fillLight);
+
+      // 6. Master Scene Group
+      masterRoot = new THREE.Group();
+      scene.add(masterRoot);
+
+      // Build components
+      buildConcreteDam();
+      buildCanyonAndReservoir();
+      buildPhysicsOverlays();
+
+      // Initial Calculations & Overlay Update
+      calculateAndRenderStability();
+
+      // Window resize
+      window.addEventListener('resize', onWindowResize, false);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+  </script>
+
+  <script>
+    function calculateStability() {
+      // 1. Concrete Dam Geometry & Self-Weight (Stabilizing Force & Moment Ms)
+      // Part 1: Upstream Rectangle: b = DAM_CREST_W, H = DAM_HEIGHT
+      const A1 = DAM_CREST_W * DAM_HEIGHT;
+      const W1 = A1 * DENSITY_CONCRETE; // kN per meter
+      // Arm x1 to Toe O: Upstream heel is at -DAM_BASE_W, rect extends from -DAM_BASE_W to -DAM_BASE_W + DAM_CREST_W
+      // Distance from Toe (X=0) is DAM_BASE_W - (DAM_CREST_W / 2)
+      const arm1 = DAM_BASE_W - (DAM_CREST_W / 2.0);
+
+      // Part 2: Downstream Triangle: base = DAM_BASE_W - DAM_CREST_W, height = DAM_HEIGHT
+      const triBase = DAM_BASE_W - DAM_CREST_W;
+      const A2 = 0.5 * triBase * DAM_HEIGHT;
+      const W2 = A2 * DENSITY_CONCRETE;
+      // Centroid of right triangle from vertical side is triBase / 3. Distance from toe (vertex) is (2/3) * triBase
+      const arm2 = (2.0 / 3.0) * triBase;
+
+      const totalWeight = W1 + W2;
+      const Ms_weight = (W1 * arm1) + (W2 * arm2);
+
+      // Center of Gravity of dam in X-Y (relative to Toe at 0,0)
+      const cgX = -( (W1 * arm1) + (W2 * arm2) ) / totalWeight;
+      const cgY = ( (W1 * (DAM_HEIGHT / 2)) + (W2 * (DAM_HEIGHT / 3)) ) / totalWeight;
+
+      // 2. Hydrostatic Thrust & Overturning Moment (Mv_hydro)
+      const h = Math.min(waterHeight, DAM_HEIGHT + 1.0);
+      const F_hydro = 0.5 * DENSITY_WATER * Math.pow(h, 2); // kN/m
+      const arm_hydro = h / 3.0; // Lever arm to base toe
+      const Mv_hydro = F_hydro * arm_hydro;
+
+      // 3. Uplift Pressure Force & Moment (Subpresión)
+      // Triangular uplift under base: maximum pressure at upstream heel = upliftRatio * gamma_w * h
+      const p_uplift_max = upliftRatio * DENSITY_WATER * h;
+      const F_uplift = 0.5 * p_uplift_max * DAM_BASE_W;
+      // Centroid of triangular uplift is at (2/3) * DAM_BASE_W from Toe (O)
+      const arm_uplift = (2.0 / 3.0) * DAM_BASE_W;
+      const Mv_uplift = F_uplift * arm_uplift;
+
+      // Net Overturning Moment
+      const totalMv = Mv_hydro + Mv_uplift;
+      const totalMs = Ms_weight;
+
+      // Factor of Safety against Overturning: FS = sum(Ms) / sum(Mv)
+      const FS = totalMs / Math.max(1.0, totalMv);
+
+      return {
+        FS: FS,
+        Ms: totalMs,
+        Mv: totalMv,
+        F_hydro: F_hydro,
+        F_uplift: F_uplift,
+        totalWeight: totalWeight,
+        cg: { x: cgX, y: cgY }
+      };
+    }
+
+    function calculateAndRenderStability() {
+      const data = calculateStability();
+
+      // Update telemetry DOM
+      const statFs = document.getElementById('stat-fs');
+      const fsBar = document.getElementById('fs-bar');
+      const fsDesc = document.getElementById('fs-status-desc');
+
+      statFs.textContent = `FS = ${data.FS.toFixed(2)}`;
+      document.getElementById('stat-ms').textContent = Math.round(data.Ms).toLocaleString() + ' kNm/m';
+      document.getElementById('stat-mv').textContent = Math.round(data.Mv).toLocaleString() + ' kNm/m';
+
+      // Bar width and safety color coding
+      const barPercent = Math.min(100, Math.max(5, (data.FS / 3.5) * 100));
+      fsBar.style.width = barPercent + '%';
+
+      if (data.FS >= 2.0) {
+        statFs.className = 'text-base font-bold mono-font text-emerald-400';
+        fsBar.className = 'bg-emerald-500 h-full rounded-full transition-all duration-300';
+        fsDesc.textContent = 'Estado estructural: Seguro. El empuje hidrostático se encuentra dentro de los márgenes normativos de diseño.';
+        fsDesc.className = 'text-[11px] text-emerald-300/90 mt-2';
+      } else if (data.FS >= 1.5) {
+        statFs.className = 'text-base font-bold mono-font text-amber-400';
+        fsBar.className = 'bg-amber-500 h-full rounded-full transition-all duration-300';
+        fsDesc.textContent = 'Estado estructural: Precaución. Margen de seguridad reducido debido a un nivel elevado del embalse o alta subpresión.';
+        fsDesc.className = 'text-[11px] text-amber-300/90 mt-2';
+      } else if (data.FS >= 1.0) {
+        statFs.className = 'text-base font-bold mono-font text-rose-400';
+        fsBar.className = 'bg-rose-500 h-full rounded-full transition-all duration-300';
+        fsDesc.textContent = '¡ALERTA CRÍTICA! Factor de seguridad por debajo de 1.5. Riesgo inminente de inestabilidad y apertura de fisuras en el talón.';
+        fsDesc.className = 'text-[11px] text-rose-400 font-semibold mt-2';
+      } else {
+        statFs.className = 'text-base font-bold mono-font text-red-500 animate-pulse';
+        fsBar.className = 'bg-red-600 h-full rounded-full transition-all duration-300';
+        fsDesc.textContent = '¡FALLO ESTRUCTURAL POR VUELCO! El momento volcador supera la capacidad resistente por peso propio.';
+        fsDesc.className = 'text-[11px] text-red-400 font-bold mt-2';
+      }
+
+      // Update vectors and visual arrows
+      updatePressureAndVectors(data);
+
+      // Update water mesh Y elevation
+      waterMesh.position.y = waterHeight;
+      if (waterMesh.userData.deepBody) {
+        waterMesh.userData.deepBody.scale.y = Math.max(0.1, waterHeight / 17.0);
+        waterMesh.userData.deepBody.position.y = waterHeight / 2;
+      }
+
+      // Adjust spillway visibility depending on water level
+      spillwayJetsGroup.visible = isSpillwayOpen && (waterHeight >= (DAM_HEIGHT - 3.5));
+    }
+  </script>
+
+  <script>
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const text = document.getElementById('toast-text');
+      text.textContent = msg;
+      toast.classList.remove('opacity-0', 'translate-y-3');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-3');
+      }, 2200);
+    }
+
+    function setupEventListeners() {
+      // 1. Water Level Slider
+      const sliderWater = document.getElementById('slider-water-level');
+      const valWater = document.getElementById('val-water-level');
+      sliderWater.addEventListener('input', (e) => {
+        waterHeight = parseFloat(e.target.value);
+        const percent = Math.round((waterHeight / DAM_HEIGHT) * 100);
+        valWater.textContent = `${waterHeight.toFixed(1)} m (${percent}%)`;
+        calculateAndRenderStability();
+      });
+
+      // 2. Wave Agitation Slider
+      const sliderWave = document.getElementById('slider-wave-speed');
+      const valWave = document.getElementById('val-wave-speed');
+      sliderWave.addEventListener('input', (e) => {
+        waveAgitation = parseFloat(e.target.value);
+        valWave.textContent = waveAgitation < 0.6 ? 'Calmo (0.5x)' : waveAgitation > 1.6 ? 'Tormenta (2.0x)' : 'Medio (1.0x)';
+      });
+
+      // 3. Uplift Pressure Slider
+      const sliderUplift = document.getElementById('slider-uplift');
+      const valUplift = document.getElementById('val-uplift');
+      sliderUplift.addEventListener('input', (e) => {
+        upliftRatio = parseFloat(e.target.value);
+        valUplift.textContent = `${Math.round(upliftRatio * 100)}% (${upliftRatio > 0.7 ? 'No Drenada' : 'Drenada'})`;
+        calculateAndRenderStability();
+      });
+
+      // Toggles for Vectors and Overlays
+      document.getElementById('toggle-pivot').addEventListener('change', (e) => {
+        pivotMarkerGroup.visible = e.target.checked;
+        showToast(e.target.checked ? 'Punto de pivote activado' : 'Punto de pivote oculto');
+      });
+
+      document.getElementById('toggle-pressure').addEventListener('change', (e) => {
+        pressureDiagramGroup.visible = e.target.checked;
+        showToast(e.target.checked ? 'Prisma de presión hidrostática visible' : 'Prisma de presión oculto');
+      });
+
+      document.getElementById('toggle-vectors').addEventListener('change', (e) => {
+        momentVectorsGroup.visible = e.target.checked;
+        showToast(e.target.checked ? 'Vectores de momentos activados' : 'Vectores de momentos ocultos');
+      });
+
+      // Direct Lateral Cut View Button
+      document.getElementById('btn-lateral-view').addEventListener('click', () => {
+        camera.position.set(0, 11, 46);
+        controls.target.set(-7.5, 9, 0);
+        controls.update();
+        showToast('Vista de corte lateral enfocada');
+      });
+
+      // Cutaway Toggle
+      document.getElementById('toggle-cutaway').addEventListener('change', (e) => {
+        if (e.target.checked) {
+          camera.position.set(0, 11, 46);
+          controls.target.set(-7.5, 9, 0);
+          controls.update();
+          showToast('Vista de corte lateral activada');
+        } else {
+          camera.position.set(28, 22, 38);
+          controls.target.set(-5, 9.0, 0);
+          controls.update();
+          showToast('Vista en perspectiva 3D restablecida');
+        }
+      });
+
+      // Spillway Discharge Button
+      const btnFlow = document.getElementById('btn-toggle-flow');
+      const flowText = document.getElementById('flow-text');
+      btnFlow.addEventListener('click', () => {
+        isSpillwayOpen = !isSpillwayOpen;
+        if (isSpillwayOpen) {
+          flowText.textContent = 'Aliviadero Activo';
+          btnFlow.classList.replace('bg-slate-800', 'bg-cyan-500/20');
+          btnFlow.classList.replace('text-gray-400', 'text-cyan-300');
+          showToast('Compuertas de aliviadero abiertas');
+        } else {
+          flowText.textContent = 'Compuertas Cerradas';
+          btnFlow.classList.replace('bg-cyan-500/20', 'bg-slate-800');
+          btnFlow.classList.replace('text-cyan-300', 'text-gray-400');
+          showToast('Compuertas cerradas');
+        }
+        spillwayJetsGroup.visible = isSpillwayOpen && (waterHeight >= (DAM_HEIGHT - 3.5));
+      });
+
+      // Presets & Scenarios
+      document.getElementById('scenario-normal').addEventListener('click', () => {
+        waterHeight = 14.0;
+        upliftRatio = 0.4;
+        simulateFailureTilt = false;
+        currentTiltAngle = 0;
+        damMeshGroup.rotation.z = 0;
+
+        syncSliders();
+        calculateAndRenderStability();
+        showToast('Escenario: Operación normal segura');
+      });
+
+      document.getElementById('scenario-flood').addEventListener('click', () => {
+        waterHeight = 19.5;
+        upliftRatio = 0.75;
+        simulateFailureTilt = false;
+        currentTiltAngle = 0;
+        damMeshGroup.rotation.z = 0;
+
+        syncSliders();
+        calculateAndRenderStability();
+        showToast('Escenario: Crecida de avenida máxima extraordinaria');
+      });
+
+      document.getElementById('scenario-overturn').addEventListener('click', () => {
+        waterHeight = 21.0;
+        upliftRatio = 1.0;
+        simulateFailureTilt = true;
+
+        syncSliders();
+        calculateAndRenderStability();
+        showToast('¡Simulación de fallo activo por volcamiento!');
+      });
+
+      // Reset Camera
+      document.getElementById('btn-reset-cam').addEventListener('click', () => {
+        camera.position.set(28, 22, 38);
+        controls.target.set(-5, 9.0, 0);
+        controls.update();
+        showToast('Cámara reajustada');
+      });
+
+      // Mobile Menu Toggle
+      const togglePanelBtn = document.getElementById('btn-toggle-panel');
+      const mainPanel = document.getElementById('main-panel');
+      togglePanelBtn.addEventListener('click', () => {
+        const isHidden = mainPanel.classList.contains('translate-x-full');
+        if (isHidden) {
+          mainPanel.classList.remove('translate-x-full');
+          mainPanel.classList.add('translate-x-0');
+        } else {
+          mainPanel.classList.remove('translate-x-0');
+          mainPanel.classList.add('translate-x-full');
+        }
+      });
+    }
+
+    const GEMINI_API_KEY = ""; // Canvas provides the API key at runtime if empty
+    let lastGeneratedAuditScript = "";
+    let activeScenarioData = null;
+
+    // Exponential Backoff Fetch Handler
+    async function fetchWithBackoff(url, options, maxRetries = 3) {
+      let delay = 1000;
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const res = await fetch(url, options);
+          if (res.status === 429 || res.status >= 500) {
+            await new Promise(r => setTimeout(r, delay));
+            delay *= 2;
+            continue;
+          }
+          return res;
+        } catch (err) {
+          if (i === maxRetries - 1) throw err;
+          await new Promise(r => setTimeout(r, delay));
+          delay *= 2;
+        }
+      }
+      return fetch(url, options);
+    }
+
+    // PCM to WAV container conversion for Gemini 2.5 TTS
+    function base64ToArrayBuffer(base64) {
+      const binaryString = window.atob(base64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes.buffer;
+    }
+
+    function pcmToWav(pcm16, sampleRate) {
+      const numChannels = 1;
+      const bytesPerSample = 2;
+      const blockAlign = numChannels * bytesPerSample;
+      const byteRate = sampleRate * blockAlign;
+      const dataSize = pcm16.byteLength;
+      const buffer = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(buffer);
+
+      function writeString(offset, string) {
+        for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i));
+        }
+      }
+
+      writeString(0, 'RIFF');
+      view.setUint32(4, 36 + dataSize, true);
+      writeString(8, 'WAVE');
+      writeString(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true); // PCM
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, byteRate, true);
+      view.setUint16(32, blockAlign, true);
+      view.setUint16(34, 16, true);
+      writeString(36, 'data');
+      view.setUint32(40, dataSize, true);
+
+      const pcmBytes = new Uint8Array(pcm16.buffer);
+      for (let i = 0; i < pcmBytes.length; i++) {
+        view.setUint8(44 + i, pcmBytes[i]);
+      }
+
+      return new Blob([view], { type: 'audio/wav' });
+    }
+
+    // Helper to gather live telemetry payload
+    function getCurrentDamTelemetry() {
+      const data = calculateStability();
+      return {
+        height: waterHeight,
+        waterHeightRatio: (waterHeight / DAM_HEIGHT).toFixed(2),
+        damHeight: DAM_HEIGHT,
+        baseWidth: DAM_BASE_W,
+        crestWidth: DAM_CREST_W,
+        FS: data.FS.toFixed(2),
+        Ms: Math.round(data.Ms),
+        Mv: Math.round(data.Mv),
+        F_hydro: Math.round(data.F_hydro),
+        F_uplift: Math.round(data.F_uplift),
+        totalWeight: Math.round(data.totalWeight),
+        upliftRatio: upliftRatio,
+        spillwayOpen: isSpillwayOpen,
+        waveAgitation: waveAgitation
+      };
+    }
+
+    function updateAiTelemetrySnapshot() {
+      const snap = getCurrentDamTelemetry();
+      const container = document.getElementById('ai-telemetry-snapshot');
+      container.innerHTML = `
+        <div><span class="text-gray-500 block">Nivel Agua (h):</span><span class="text-cyan-400 font-bold">${snap.height} m</span></div>
+        <div><span class="text-gray-500 block">Factor Seg. (FS):</span><span class="${snap.FS < 1.5 ? 'text-rose-400' : 'text-emerald-400'} font-bold">${snap.FS}</span></div>
+        <div><span class="text-gray-500 block">Momento Ms:</span><span class="text-emerald-400">${snap.Ms} kN·m</span></div>
+        <div><span class="text-gray-500 block">Momento Mv:</span><span class="text-red-400">${snap.Mv} kN·m</span></div>
+        <div><span class="text-gray-500 block">Empuje Hidrostático:</span><span class="text-cyan-300">${snap.F_hydro} kN/m</span></div>
+        <div><span class="text-gray-500 block">Subpresión Cimentación:</span><span class="text-amber-400">${snap.F_uplift} kN/m</span></div>
+        <div><span class="text-gray-500 block">Drenaje Base:</span><span class="text-gray-200">${(snap.upliftRatio * 100).toFixed(0)}%</span></div>
+        <div><span class="text-gray-500 block">Aliviadero:</span><span class="${snap.spillwayOpen ? 'text-emerald-300' : 'text-rose-300'}">${snap.spillwayOpen ? 'Abierto' : 'Cerrado'}</span></div>
+      `;
+    }
+
+    async function requestDamAuditWithGemini() {
+      const snap = getCurrentDamTelemetry();
+      const loading = document.getElementById('audit-loading');
+      const resultBox = document.getElementById('audit-result-text');
+      const ttsBtn = document.getElementById('btn-listen-tts');
+
+      loading.classList.remove('hidden');
+      ttsBtn.classList.add('hidden');
+
+      const systemPrompt = "Eres un Auditor e Ingeniero Consultor Sénior de Seguridad de Presas de Hormigón y Geotecnia Hidráulica (ICOLD / USACE). Proporciona un dictamen conciso, profesional y directo estructurado con subtítulos: 1. Diagnóstico Estructural y Factor de Seguridad, 2. Estado de Tensiones en Talón y Pie, 3. Criterio de Estabilidad al Vuelco, 4. Medidas de Mitigación Operativas.";
+      
+      const userQuery = `Analiza la estabilidad actual de esta presa de gravedad de hormigón:\n- Altura presa: ${snap.damHeight} m, Base: ${snap.baseWidth} m, Coronación: ${snap.crestWidth} m.\n- Cota del embalse: ${snap.height} m (${Math.round(snap.waterHeightRatio * 100)}% de capacidad).\n- Factor de Seguridad al vuelco actual: FS = ${snap.FS}.\n- Momento Estabilizador (peso propio): Ms = ${snap.Ms} kNm/m.\n- Momento Volcador (hidrostático + subpresión): Mv = ${snap.Mv} kNm/m.\n- Fuerza de empuje hidrostático: Fh = ${snap.F_hydro} kN/m.\n- Fuerza ascensional de subpresión: U = ${snap.F_uplift} kN/m.\n- Aliviadero: ${snap.spillwayOpen ? 'Operativo y descargando' : 'Cerrado'}.\n- Coeficiente de subpresión: ${snap.upliftRatio}. Redacta el dictamen técnico con conclusiones operativas claras.`;
+
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`;
+      
+      const payload = {
+        contents: [{ parts: [{ text: userQuery }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] }
+      };
+
+      try {
+        const response = await fetchWithBackoff(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (text) {
+          // Format markdown-like bold text and bullet points into HTML
+          lastGeneratedAuditScript = text.replace(/[*#]/g, ' ').replace(/\n\s*\n/g, '\n').trim();
+          
+          let formattedHtml = text
+            .replace(/### (.*?)\n/g, '<h5 class="text-purple-300 font-bold text-xs mt-2">$1</h5>')
+            .replace(/## (.*?)\n/g, '<h4 class="text-cyan-300 font-bold text-xs mt-2">$1</h4>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
+            .replace(/^\* (.*?)$/gm, '<li class="ml-4 list-disc text-gray-300">$1</li>')
+            .replace(/^\d+\. (.*?)$/gm, '<div class="ml-2 mt-1 text-gray-300"><span class="text-purple-400 font-semibold">•</span> $1</div>')
+            .replace(/\n\n/g, '<p class="mt-1.5"></p>');
+
+          resultBox.innerHTML = formattedHtml;
+          ttsBtn.classList.remove('hidden');
+          showToast('Dictamen técnico generado con Gemini');
+        } else {
+          resultBox.innerHTML = `<span class="text-rose-400">No se pudo obtener el informe de la IA. Por favor, reintenta.</span>`;
+        }
+      } catch (err) {
+        resultBox.innerHTML = `<span class="text-rose-400">Error de conexión con la API de Gemini: ${err.message}</span>`;
+      } finally {
+        loading.classList.add('hidden');
+      }
+    }
+
+    // Generate extreme hydrological scenario with structured JSON schema
+    async function requestExtremeScenario(promptDescription) {
+      const btnGen = document.getElementById('btn-generate-scenario');
+      const resultBox = document.getElementById('scenario-result-box');
+      btnGen.disabled = true;
+      btnGen.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sintetizando...`;
+
+      const systemPrompt = "Eres un modelador hidrológico y de crecidas de presas. Genera parámetros realistas para simular un escenario extremo en el simulador 3D de presa de gravedad.";
+      
+      const payload = {
+        contents: [{ parts: [{ text: `Genera los valores para simular el siguiente evento: "${promptDescription}". Ten en cuenta que la altura máxima de presa es 20m, el rango de agua es 4m a 21m, la subpresión de 0.0 a 1.0 y agitación de oleaje de 0.2 a 2.5.` }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              scenarioName: { type: "STRING" },
+              description: { type: "STRING" },
+              targetWaterHeight: { type: "NUMBER" },
+              targetUplift: { type: "NUMBER" },
+              targetWaveAgitation: { type: "NUMBER" },
+              targetSpillwayOpen: { type: "BOOLEAN" },
+              simulateFailureTilt: { type: "BOOLEAN" },
+              consequences: { type: "STRING" },
+              recommendedActions: { type: "ARRAY", items: { type: "STRING" } }
+            },
+            required: ["scenarioName", "description", "targetWaterHeight", "targetUplift", "targetWaveAgitation", "targetSpillwayOpen", "consequences", "recommendedActions"]
+          }
+        }
+      };
+
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`;
+
+      try {
+        const response = await fetchWithBackoff(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        const jsonText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (jsonText) {
+          activeScenarioData = JSON.parse(jsonText);
+          
+          document.getElementById('scenario-title').textContent = activeScenarioData.scenarioName;
+          document.getElementById('scenario-desc').textContent = activeScenarioData.description;
+          document.getElementById('scenario-water').textContent = `${activeScenarioData.targetWaterHeight.toFixed(1)} m`;
+          document.getElementById('scenario-uplift').textContent = `${Math.round(activeScenarioData.targetUplift * 100)}%`;
+          document.getElementById('scenario-wave').textContent = `${activeScenarioData.targetWaveAgitation.toFixed(1)}x`;
+
+          const actionsContainer = document.getElementById('scenario-actions');
+          actionsContainer.innerHTML = `
+            <span class="font-bold text-amber-300 block mb-1">Impacto previsto:</span>
+            <p class="text-gray-300 mb-2">${activeScenarioData.consequences}</p>
+            <span class="font-bold text-cyan-300 block mb-1">Acciones recomendadas:</span>
+            <ul class="list-disc ml-4 space-y-0.5 text-gray-300">
+              ${activeScenarioData.recommendedActions.map(a => `<li>${a}</li>`).join('')}
+            </ul>
+          `;
+
+          resultBox.classList.remove('hidden');
+          showToast(`Escenario "${activeScenarioData.scenarioName}" generado`);
+        }
+      } catch (err) {
+        showToast('Error al sintetizar escenario con IA');
+      } finally {
+        btnGen.disabled = false;
+        btnGen.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i><span>Generar</span>`;
+      }
+    }
+
+    // Apply synthesized scenario to the 3D dam model
+    function applySynthesizedScenario() {
+      if (!activeScenarioData) return;
+
+      waterHeight = Math.max(4, Math.min(21, activeScenarioData.targetWaterHeight));
+      upliftRatio = Math.max(0, Math.min(1.0, activeScenarioData.targetUplift));
+      waveAgitation = Math.max(0.2, Math.min(2.5, activeScenarioData.targetWaveAgitation));
+      isSpillwayOpen = !!activeScenarioData.targetSpillwayOpen;
+      simulateFailureTilt = !!activeScenarioData.simulateFailureTilt;
+
+      if (!simulateFailureTilt) {
+        currentTiltAngle = 0;
+        damMeshGroup.rotation.z = 0;
+      }
+
+      // Update flow button styling
+      const btnFlow = document.getElementById('btn-toggle-flow');
+      const flowText = document.getElementById('flow-text');
+      if (isSpillwayOpen) {
+        flowText.textContent = 'Aliviadero Activo';
+        btnFlow.classList.replace('bg-slate-800', 'bg-cyan-500/20');
+        btnFlow.classList.replace('text-gray-400', 'text-cyan-300');
+      } else {
+        flowText.textContent = 'Compuertas Cerradas';
+        btnFlow.classList.replace('bg-cyan-500/20', 'bg-slate-800');
+        btnFlow.classList.replace('text-cyan-300', 'text-gray-400');
+      }
+
+      syncSliders();
+      calculateAndRenderStability();
+      updateAiTelemetrySnapshot();
+
+      // Close modal and notify
+      document.getElementById('ai-modal').classList.remove('opacity-100', 'pointer-events-auto');
+      document.getElementById('ai-modal').classList.add('opacity-0', 'pointer-events-none');
+      showToast(`Escenario "${activeScenarioData.scenarioName}" aplicado en 3D`);
+    }
+
+    // Free Technical Q&A with live dam context
+    async function requestTechnicalQA(question) {
+      const sendBtn = document.getElementById('btn-send-qa');
+      const resBox = document.getElementById('qa-response-box');
+      const resText = document.getElementById('qa-response-text');
+
+      sendBtn.disabled = true;
+      sendBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i>`;
+      resBox.classList.remove('hidden');
+      resText.innerHTML = `<span class="text-purple-300 animate-pulse">Consultando base de conocimientos de ingeniería con Gemini...</span>`;
+
+      const snap = getCurrentDamTelemetry();
+      const systemPrompt = `Eres un catedrático especialista en Mecánica de Fluidos, Obras Hidráulicas y Estabilidad de Presas. Responde a preguntas técnicas con claridad matemática y física, haciendo referencia al estado actual de la presa 3D si es relevante (Nivel h=${snap.height}m, FS=${snap.FS}, Momento volcador=${snap.Mv}kNm/m). Sé directo y conciso.`;
+
+      const payload = {
+        contents: [{ parts: [{ text: question }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] }
+      };
+
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`;
+
+      try {
+        const response = await fetchWithBackoff(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        const ans = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (ans) {
+          resText.innerHTML = ans
+            .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
+            .replace(/\n/g, '<br>');
+        } else {
+          resText.innerHTML = `<span class="text-rose-400">No se pudo procesar la respuesta. Intenta reformular tu pregunta.</span>`;
+        }
+      } catch (err) {
+        resText.innerHTML = `<span class="text-rose-400">Error: ${err.message}</span>`;
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i><span>Consultar</span>`;
+      }
+    }
+
+    // Text-to-Speech Emergency Briefing using gemini-2.5-flash-preview-tts
+    async function playAudioBriefingTTS() {
+      if (!lastGeneratedAuditScript) return;
+
+      const ttsBtn = document.getElementById('btn-listen-tts');
+      const ttsIcon = document.getElementById('tts-icon');
+      const ttsText = document.getElementById('tts-btn-text');
+      const player = document.getElementById('tts-audio-player');
+
+      ttsBtn.disabled = true;
+      ttsIcon.className = 'fa-solid fa-spinner fa-spin';
+      ttsText.textContent = 'Generando audio...';
+
+      // Summarize script to a clear ~20 second spoken alert
+      const snap = getCurrentDamTelemetry();
+      const speechPrompt = `Locuta en tono profesional, sereno y autoritario de jefe de ingeniería de presa el siguiente informe de seguridad:\n"Atención sala de control. Nivel del embalse a ${snap.height} metros. Factor de seguridad calculado en ${snap.FS}. ${snap.FS < 1.5 ? 'Estado crítico, momento volcador elevado.' : 'Estructura en rango operativo admisible.'} ${lastGeneratedAuditScript.slice(0, 180)}."`;
+
+      const payload = {
+        contents: [{ parts: [{ text: speechPrompt }] }],
+        generationConfig: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: "Kore" }
+            }
+          }
+        },
+        model: "gemini-2.5-flash-preview-tts"
+      };
+
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${GEMINI_API_KEY}`;
+
+      try {
+        const response = await fetchWithBackoff(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        const part = result?.candidates?.[0]?.content?.parts?.[0];
+        const audioData = part?.inlineData?.data;
+        const mimeType = part?.inlineData?.mimeType;
+
+        if (audioData && mimeType && mimeType.startsWith("audio/")) {
+          const rateMatch = mimeType.match(/rate=(\d+)/);
+          const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
+          const pcmArrayBuffer = base64ToArrayBuffer(audioData);
+          const pcm16 = new Int16Array(pcmArrayBuffer);
+          const wavBlob = pcmToWav(pcm16, sampleRate);
+          const audioUrl = URL.createObjectURL(wavBlob);
+
+          player.src = audioUrl;
+          player.play();
+
+          ttsIcon.className = 'fa-solid fa-volume-high text-emerald-400';
+          ttsText.textContent = 'Reproduciendo audio...';
+
+          player.onended = () => {
+            ttsBtn.disabled = false;
+            ttsIcon.className = 'fa-solid fa-volume-high';
+            ttsText.textContent = 'Escuchar Informe (TTS)';
+          };
+          showToast('Reproduciendo informe sonoro');
+        } else {
+          showToast('No se recibió audio del modelo TTS');
+          ttsBtn.disabled = false;
+          ttsIcon.className = 'fa-solid fa-volume-high';
+          ttsText.textContent = 'Escuchar Informe (TTS)';
+        }
+      } catch (err) {
+        showToast('Error al sintetizar voz con Gemini');
+        ttsBtn.disabled = false;
+        ttsIcon.className = 'fa-solid fa-volume-high';
+        ttsText.textContent = 'Escuchar Informe (TTS)';
+      }
+    }
+
+    function setupAiEventListeners() {
+      const modal = document.getElementById('ai-modal');
+      const openModal = () => {
+        updateAiTelemetrySnapshot();
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+        modal.classList.add('opacity-100', 'pointer-events-auto');
+        modal.querySelector('.glassmorphism').classList.remove('scale-95');
+        modal.querySelector('.glassmorphism').classList.add('scale-100');
+      };
+      const closeModal = () => {
+        modal.classList.remove('opacity-100', 'pointer-events-auto');
+        modal.classList.add('opacity-0', 'pointer-events-none');
+        modal.querySelector('.glassmorphism').classList.remove('scale-100');
+        modal.querySelector('.glassmorphism').classList.add('scale-95');
+        const player = document.getElementById('tts-audio-player');
+        if (player) player.pause();
+      };
+
+      document.getElementById('btn-ai-auditor').addEventListener('click', openModal);
+      document.getElementById('btn-quick-audit').addEventListener('click', () => {
+        openModal();
+        requestDamAuditWithGemini();
+      });
+
+      document.getElementById('btn-close-ai-modal').addEventListener('click', closeModal);
+      document.getElementById('btn-modal-close-footer').addEventListener('click', closeModal);
+
+      // AI Tabs switching
+      const tabAudit = document.getElementById('tab-audit');
+      const tabScenario = document.getElementById('tab-scenario');
+      const tabQa = document.getElementById('tab-qa');
+
+      const viewAudit = document.getElementById('view-audit');
+      const viewScenario = document.getElementById('view-scenario');
+      const viewQa = document.getElementById('view-qa');
+
+      const switchTab = (activeTab, activeView) => {
+        [tabAudit, tabScenario, tabQa].forEach(t => {
+          t.className = 'px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800/60 text-gray-300 hover:bg-slate-800 border border-slate-700 transition';
+        });
+        [viewAudit, viewScenario, viewQa].forEach(v => v.classList.add('hidden'));
+
+        activeTab.className = 'px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-500/30 text-purple-200 border border-purple-500/50 transition';
+        activeView.classList.remove('hidden');
+      };
+
+      tabAudit.addEventListener('click', () => {
+        switchTab(tabAudit, viewAudit);
+        updateAiTelemetrySnapshot();
+      });
+      tabScenario.addEventListener('click', () => switchTab(tabScenario, viewScenario));
+      tabQa.addEventListener('click', () => switchTab(tabQa, viewQa));
+
+      // Trigger Audit
+      document.getElementById('btn-run-audit').addEventListener('click', () => {
+        updateAiTelemetrySnapshot();
+        requestDamAuditWithGemini();
+      });
+
+      // Preset AI Scenarios
+      document.querySelectorAll('.preset-scenario-ai').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const type = btn.getAttribute('data-type');
+          let query = "Crecida extraordinaria milenaria que satura el embalse";
+          if (type === 'uplift_failure') query = "Fallo total de la red de drenaje de cimentación con subpresión al 100% y socavación parcial en pie";
+          if (type === 'rapid_drawdown') query = "Operación de desembalse forzado rápido con apertura total de compuertas y descenso abrupto";
+          requestExtremeScenario(query);
+        });
+      });
+
+      document.getElementById('btn-generate-scenario').addEventListener('click', () => {
+        const customPrompt = document.getElementById('custom-scenario-input').value.trim();
+        if (customPrompt) {
+          requestExtremeScenario(customPrompt);
+        } else {
+          showToast('Por favor escribe un escenario o selecciona uno predefinido');
+        }
+      });
+
+      document.getElementById('btn-apply-scenario').addEventListener('click', applySynthesizedScenario);
+
+      // Q&A submission
+      document.getElementById('btn-send-qa').addEventListener('click', () => {
+        const query = document.getElementById('qa-input').value.trim();
+        if (query) {
+          requestTechnicalQA(query);
+        }
+      });
+      document.getElementById('qa-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const query = document.getElementById('qa-input').value.trim();
+          if (query) requestTechnicalQA(query);
+        }
+      });
+
+      // TTS Trigger
+      document.getElementById('btn-listen-tts').addEventListener('click', playAudioBriefingTTS);
+    }
+
+    function syncSliders() {
+      document.getElementById('slider-water-level').value = waterHeight;
+      const percent = Math.round((waterHeight / DAM_HEIGHT) * 100);
+      document.getElementById('val-water-level').textContent = `${waterHeight.toFixed(1)} m (${percent}%)`;
+
+      document.getElementById('slider-uplift').value = upliftRatio;
+      document.getElementById('val-uplift').textContent = `${Math.round(upliftRatio * 100)}%`;
+    }
+  </script>
+
+  <script>
+    const clock = new THREE.Clock();
+
+    function animateWaves(elapsedTime) {
+      if (!waterGeometry) return;
+
+      const positionAttribute = waterGeometry.attributes.position;
+      const waveFreq = 0.35 * waveAgitation;
+      const waveSpeed = 2.4 * waveAgitation;
+      const waveAmp = 0.28 * waveAgitation;
+
+      // Displace each vertex along Y based on multiple traveling sine components
+      for (let i = 0; i < positionAttribute.count; i++) {
+        const vx = positionAttribute.getX(i);
+        const vz = positionAttribute.getZ(i);
+
+        // Wave traveling towards the upstream face (+X direction)
+        const wave1 = Math.sin(vx * waveFreq + elapsedTime * waveSpeed) * waveAmp;
+        const wave2 = Math.cos(vz * waveFreq * 1.5 + elapsedTime * waveSpeed * 0.8) * (waveAmp * 0.6);
+        const wave3 = Math.sin((vx + vz) * waveFreq * 0.5 + elapsedTime * 1.2) * (waveAmp * 0.4);
+
+        positionAttribute.setY(i, wave1 + wave2 + wave3);
+      }
+
+      positionAttribute.needsUpdate = true;
+      waterGeometry.computeVertexNormals();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();
+      const elapsed = clock.getElapsedTime();
+
+      // 1. Fluid Wave Dynamics
+      animateWaves(elapsed);
+
+      // 2. Pulse Pivot Marker Indicator
+      if (pivotMarkerGroup && pivotMarkerGroup.visible) {
+        const pulse = 1.0 + Math.sin(elapsed * 4.5) * 0.15;
+        pivotMarkerGroup.children[0].scale.set(pulse, pulse, pulse);
+      }
+
+      // 3. Structural Overturning Tilt Motion (If failure scenario is engaged)
+      if (simulateFailureTilt) {
+        const targetTilt = 0.18; // approx 10 degrees forward rotation around toe
+        currentTiltAngle = THREE.MathUtils.lerp(currentTiltAngle, targetTilt, delta * 1.5);
+        // Rotate dam mesh around Toe O (local origin is aligned with Toe)
+        damMeshGroup.rotation.z = currentTiltAngle;
+      } else if (currentTiltAngle > 0.001) {
+        currentTiltAngle = THREE.MathUtils.lerp(currentTiltAngle, 0.0, delta * 3.0);
+        damMeshGroup.rotation.z = currentTiltAngle;
+      }
+
+      // 4. Spillway chute water texture translation
+      if (spillwayJetsGroup.visible) {
+        spillwayJetsGroup.children[0].position.y = 9.8 + Math.sin(elapsed * 8.0) * 0.06;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // Launch application after window load
+    window.onload = function () {
+      initThree();
+      setupEventListeners();
+      setupAiEventListeners();
+      animate();
+    };
+  </script>
+</body>
+</html>

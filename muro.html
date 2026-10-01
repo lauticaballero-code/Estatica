@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Muro de Contención 3D Interactivo</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Three.js and OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      overflow: hidden;
+      background-color: #0b0f19;
+      color: #f3f4f6;
+    }
+    .mono-font {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glassmorphism {
+      background: rgba(17, 24, 39, 0.82);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      height: 6px;
+      border-radius: 9999px;
+      background: #374151;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #f59e0b;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.8);
+      transition: transform 0.15s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+  </style>
+</head>
+
+<body class="h-full w-full select-none overflow-hidden relative">
+
+  <!-- 3D Canvas Container -->
+  <div id="canvas-container" class="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing z-0">
+    <canvas id="wall-canvas" class="w-full h-full block"></canvas>
+  </div>
+
+  <!-- Header Info -->
+  <header class="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none z-10">
+    <div class="glassmorphism pointer-events-auto px-4 py-2.5 rounded-2xl flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-700 flex items-center justify-center shadow-lg shadow-amber-500/20">
+        <i class="fa-solid fa-mountain text-white text-lg"></i>
+      </div>
+      <div>
+        <h1 class="text-sm font-bold tracking-wide text-white flex items-center gap-2">
+          MURO DE CONTENCIÓN LATERAL 3D
+          <span class="text-[10px] bg-amber-500/20 text-amber-300 font-semibold px-2 py-0.5 rounded-full border border-amber-500/40">Geotecnia / Estructura</span>
+        </h1>
+        <p class="text-xs text-gray-400">Modelo estructural con terreno retenido, zapata y drenaje</p>
+      </div>
+    </div>
+
+    <!-- Quick Rotation & Camera Controls -->
+    <div class="glassmorphism pointer-events-auto px-3 py-2 rounded-2xl flex items-center gap-2">
+      <button id="btn-toggle-spin" class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold border border-amber-500/40 transition">
+        <i id="spin-icon" class="fa-solid fa-rotate animate-spin text-xs"></i>
+        <span id="spin-text">Giro Activo</span>
+      </button>
+
+      <button id="btn-reset-cam" title="Restablecer Cámara" class="w-8 h-8 rounded-xl flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-800 transition">
+        <i class="fa-solid fa-camera-rotate text-xs"></i>
+      </button>
+
+      <button id="btn-toggle-panel" title="Mostrar/Ocultar Menú" class="w-8 h-8 rounded-xl flex items-center justify-center text-amber-400 hover:bg-gray-800 transition">
+        <i class="fa-solid fa-sliders text-xs"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Interactive Controls Side Panel -->
+  <aside id="main-panel" class="absolute top-20 right-4 w-80 sm:w-88 glassmorphism rounded-3xl p-5 overflow-y-auto max-h-[calc(100vh-6rem)] flex flex-col gap-4 z-20 transition-all duration-300 transform translate-x-0">
+    
+    <!-- Rotation and Speed Settings -->
+    <div>
+      <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+        <i class="fa-solid fa-arrows-spin text-amber-400"></i> Control de Giro
+      </h3>
+      <div class="space-y-3">
+        <div>
+          <div class="flex justify-between text-xs mb-1.5">
+            <span class="text-gray-300">Velocidad de rotación</span>
+            <span id="spin-speed-val" class="mono-font text-amber-400 font-medium">1.0x</span>
+          </div>
+          <input type="range" id="slider-spin-speed" min="0.1" max="3" step="0.1" value="1.0" class="w-full">
+        </div>
+
+        <div class="grid grid-cols-3 gap-1.5 pt-1">
+          <button id="view-iso" class="px-2 py-1.5 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-[11px] text-gray-200 border border-gray-700 transition">Isométrica</button>
+          <button id="view-section" class="px-2 py-1.5 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-[11px] text-gray-200 border border-gray-700 transition">Corte Perfil</button>
+          <button id="view-front" class="px-2 py-1.5 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-[11px] text-gray-200 border border-gray-700 transition">Frontal</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Visual Layer Toggles -->
+    <div class="border-t border-gray-800/80 pt-3">
+      <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+        <i class="fa-solid fa-layer-group text-cyan-400"></i> Capas Visibles
+      </h3>
+      <div class="space-y-2 text-xs">
+        <label class="flex items-center justify-between text-gray-200 p-2 rounded-xl bg-gray-800/40 hover:bg-gray-800/70 cursor-pointer">
+          <span class="flex items-center gap-2">
+            <i class="fa-solid fa-mound text-amber-600"></i> Terreno Retenido
+          </span>
+          <input type="checkbox" id="toggle-soil" checked class="w-4 h-4 accent-amber-500 rounded">
+        </label>
+
+        <label class="flex items-center justify-between text-gray-200 p-2 rounded-xl bg-gray-800/40 hover:bg-gray-800/70 cursor-pointer">
+          <span class="flex items-center gap-2">
+            <i class="fa-solid fa-eye text-cyan-400"></i> Suelo Semitransparente
+          </span>
+          <input type="checkbox" id="toggle-soil-transp" class="w-4 h-4 accent-amber-500 rounded">
+        </label>
+
+        <label class="flex items-center justify-between text-gray-200 p-2 rounded-xl bg-gray-800/40 hover:bg-gray-800/70 cursor-pointer">
+          <span class="flex items-center gap-2">
+            <i class="fa-solid fa-faucet-drip text-blue-400"></i> Drenaje y Mechinales
+          </span>
+          <input type="checkbox" id="toggle-drainage" checked class="w-4 h-4 accent-amber-500 rounded">
+        </label>
+
+        <label class="flex items-center justify-between text-gray-200 p-2 rounded-xl bg-gray-800/40 hover:bg-gray-800/70 cursor-pointer">
+          <span class="flex items-center gap-2">
+            <i class="fa-solid fa-arrows-left-right text-red-400"></i> Empuje de Tierras (Diagrama)
+          </span>
+          <input type="checkbox" id="toggle-pressures" checked class="w-4 h-4 accent-amber-500 rounded">
+        </label>
+      </div>
+    </div>
+
+    <!-- Technical Specs & Elements Breakdown -->
+    <div class="border-t border-gray-800/80 pt-3">
+      <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+        <i class="fa-solid fa-circle-info text-emerald-400"></i> Elementos del Muro
+      </h3>
+      <div class="space-y-1.5 text-xs">
+        <div class="p-2 rounded-xl bg-gray-800/40 border border-gray-800">
+          <span class="font-semibold text-amber-300 block">1. Pantalla / Fuste</span>
+          <p class="text-[11px] text-gray-400">Hormigón armado con sección trapezoidal para resistir la flexión en la base.</p>
+        </div>
+        <div class="p-2 rounded-xl bg-gray-800/40 border border-gray-800">
+          <span class="font-semibold text-cyan-300 block">2. Zapata (Puntera y Talón)</span>
+          <p class="text-[11px] text-gray-400">Base ancha con diente de anclaje inferior que previene el deslizamiento y vuelco.</p>
+        </div>
+        <div class="p-2 rounded-xl bg-gray-800/40 border border-gray-800">
+          <span class="font-semibold text-blue-300 block">3. Filtro Drenante y Mechinales</span>
+          <p class="text-[11px] text-gray-400">Grava y tubos de desagüe pasantes para eliminar la presión hidrostática.</p>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Instructions Footer -->
+  <footer class="absolute bottom-4 left-4 glassmorphism px-4 py-2 rounded-2xl flex items-center gap-4 text-xs text-gray-400 pointer-events-none z-10">
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-computer-mouse text-amber-400"></i> Clic y Arrastre: Rotar a mano</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass-plus text-amber-400"></i> Rueda: Zoom</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-hand text-amber-400"></i> Clic derecho: Paneo</span>
+  </footer>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 glassmorphism px-5 py-2.5 rounded-full text-xs font-medium text-white shadow-xl opacity-0 pointer-events-none transition-all duration-300 transform translate-y-3 z-50 flex items-center gap-2">
+    <i class="fa-solid fa-circle-check text-amber-400"></i>
+    <span id="toast-text">Vista actualizada</span>
+  </div>
+
+  <script>
+    // State variables
+    let scene, camera, renderer, controls;
+    let mainModelGroup, wallGroup, soilGroup, drainageGroup, pressureGroup;
+    let isAutoRotating = true;
+    let rotationSpeed = 1.0;
+    let soilTransparent = false;
+
+    // Procedural concrete texture generator
+    function createConcreteTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#9ca3af';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Noise and mottling
+      for (let i = 0; i < 40000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const shade = Math.floor(130 + Math.random() * 45);
+        ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+        ctx.fillRect(x, y, 2, 2);
+      }
+
+      // Concrete pour lines (juntas de hormigonado)
+      ctx.strokeStyle = '#6b7280';
+      ctx.lineWidth = 2;
+      for (let y = 100; y < 512; y += 120) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(512, y);
+        ctx.stroke();
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    }
+
+    // Procedural soil texture generator
+    function createSoilTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      // Base soil brown
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Strata grains
+      for (let i = 0; i < 60000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const v = Math.random();
+        if (v < 0.3) ctx.fillStyle = '#451a03';
+        else if (v < 0.6) ctx.fillStyle = '#92400e';
+        else ctx.fillStyle = '#b45309';
+        ctx.fillRect(x, y, 2, 2);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    }
+
+    // Procedural grass texture for upper terrain
+    function createGrassTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#15803d';
+      ctx.fillRect(0, 0, 512, 512);
+
+      for (let i = 0; i < 50000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const tone = Math.random();
+        ctx.fillStyle = tone > 0.5 ? '#166534' : '#22c55e';
+        ctx.fillRect(x, y, 2, 3);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    }
+  </script>
+
+  <script>
+    function buildRetainingWall() {
+      wallGroup = new THREE.Group();
+
+      const concreteTex = createConcreteTexture();
+      concreteTex.repeat.set(1.5, 1.5);
+
+      const concreteMat = new THREE.MeshStandardMaterial({
+        map: concreteTex,
+        roughness: 0.85,
+        metalness: 0.1,
+      });
+
+      // Dimensions
+      const wallLength = 12.0;    // Longitud Z
+      const stemHeight = 6.0;     // Altura H del fuste
+      const baseStemThick = 1.0;  // Espesor en base
+      const topStemThick = 0.45;  // Espesor en coronación
+      const footingWidth = 4.2;   // Ancho total zapata
+      const footingHeel = 2.4;    // Talón (bajo el terreno)
+      const footingToe = 1.8 - baseStemThick; // Puntera
+      const footingThick = 0.8;   // Espesor zapata
+
+      // 1. Zapata (Base Slab)
+      const footingGeo = new THREE.BoxGeometry(footingWidth, footingThick, wallLength);
+      const footingMesh = new THREE.Mesh(footingGeo, concreteMat);
+      footingMesh.castShadow = true;
+      footingMesh.receiveShadow = true;
+      // Position base so front toe is around x = -footingToe, heel is at positive x
+      const footingCenterX = (footingHeel - footingToe) / 2;
+      footingMesh.position.set(footingCenterX, footingThick / 2, 0);
+      wallGroup.add(footingMesh);
+
+      // 2. Diente de Anclaje (Shear key underneath base slab to prevent sliding)
+      const keyGeo = new THREE.BoxGeometry(0.6, 0.6, wallLength);
+      const keyMesh = new THREE.Mesh(keyGeo, concreteMat);
+      keyMesh.castShadow = true;
+      keyMesh.position.set(0, -0.3, 0);
+      wallGroup.add(keyMesh);
+
+      // 3. Fuste / Pantalla Trapezoidal (Extruded Cross-Section)
+      const stemShape = new THREE.Shape();
+      const leftBottom = -baseStemThick / 2;
+      const rightBottom = baseStemThick / 2;
+      const leftTop = -topStemThick / 2;
+      const rightTop = topStemThick / 2;
+
+      // Cross section in 2D (X, Y)
+      stemShape.moveTo(leftBottom, 0);
+      stemShape.lineTo(rightBottom, 0);
+      stemShape.lineTo(rightTop, stemHeight);
+      stemShape.lineTo(leftTop, stemHeight);
+      stemShape.closePath();
+
+      const extrudeSettings = {
+        steps: 1,
+        depth: wallLength,
+        bevelEnabled: true,
+        bevelThickness: 0.04,
+        bevelSize: 0.04,
+        bevelSegments: 2
+      };
+
+      const stemGeo = new THREE.ExtrudeGeometry(stemShape, extrudeSettings);
+      stemGeo.center(); // Center to align properly
+      const stemMesh = new THREE.Mesh(stemGeo, concreteMat);
+      stemMesh.castShadow = true;
+      stemMesh.receiveShadow = true;
+      stemMesh.position.set(0, footingThick + stemHeight / 2, 0);
+      wallGroup.add(stemMesh);
+
+      // 4. Coronación / Albardilla (Top Cap detail)
+      const capGeo = new THREE.BoxGeometry(topStemThick + 0.2, 0.15, wallLength + 0.2);
+      const capMesh = new THREE.Mesh(capGeo, concreteMat);
+      capMesh.castShadow = true;
+      capMesh.position.set(0, footingThick + stemHeight + 0.075, 0);
+      wallGroup.add(capMesh);
+
+      mainModelGroup.add(wallGroup);
+    }
+  </script>
+
+  <script>
+    let soilMaterial, grassMaterial;
+
+    function buildTerrain() {
+      soilGroup = new THREE.Group();
+
+      const soilTex = createSoilTexture();
+      soilTex.repeat.set(2, 2);
+
+      const grassTex = createGrassTexture();
+      grassTex.repeat.set(2, 2);
+
+      soilMaterial = new THREE.MeshStandardMaterial({
+        map: soilTex,
+        roughness: 0.95,
+        transparent: true,
+        opacity: 0.92,
+        side: THREE.DoubleSide
+      });
+
+      grassMaterial = new THREE.MeshStandardMaterial({
+        map: grassTex,
+        roughness: 0.9,
+        transparent: true,
+        opacity: 0.95
+      });
+
+      const wallLength = 12.0;
+      const soilWidth = 7.5;
+      const soilHeight = 6.0;
+      const footingThick = 0.8;
+
+      // 1. Terreno Retenido (Backfill behind the wall, on positive X side)
+      const backfillGeo = new THREE.BoxGeometry(soilWidth, soilHeight, wallLength);
+      const backfillMesh = new THREE.Mesh(backfillGeo, soilMaterial);
+      backfillMesh.castShadow = true;
+      backfillMesh.receiveShadow = true;
+      // Posición detrás del fuste
+      const backfillX = 0.5 + soilWidth / 2;
+      backfillMesh.position.set(backfillX, footingThick + soilHeight / 2, 0);
+      soilGroup.add(backfillMesh);
+
+      // 2. Capa superior con césped (Top green surface)
+      const grassGeo = new THREE.BoxGeometry(soilWidth, 0.12, wallLength);
+      const grassMesh = new THREE.Mesh(grassGeo, grassMaterial);
+      grassMesh.position.set(backfillX, footingThick + soilHeight + 0.06, 0);
+      soilGroup.add(grassMesh);
+
+      // 3. Terreno frontal pasivo / Cimentación (Lower passive ground in front of the toe)
+      const frontSoilWidth = 5.0;
+      const frontSoilHeight = 1.0;
+      const frontSoilGeo = new THREE.BoxGeometry(frontSoilWidth, frontSoilHeight, wallLength);
+      const frontSoilMesh = new THREE.Mesh(frontSoilGeo, soilMaterial);
+      frontSoilMesh.receiveShadow = true;
+      const frontSoilX = -1.2 - frontSoilWidth / 2;
+      frontSoilMesh.position.set(frontSoilX, frontSoilHeight / 2, 0);
+      soilGroup.add(frontSoilMesh);
+
+      // Césped frontal inferior
+      const frontGrassGeo = new THREE.BoxGeometry(frontSoilWidth, 0.1, wallLength);
+      const frontGrassMesh = new THREE.Mesh(frontGrassGeo, grassMaterial);
+      frontGrassMesh.position.set(frontSoilX, frontSoilHeight + 0.05, 0);
+      soilGroup.add(frontGrassMesh);
+
+      mainModelGroup.add(soilGroup);
+    }
+  </script>
+
+  <script>
+    function buildDrainageSystem() {
+      drainageGroup = new THREE.Group();
+
+      const gravelTex = createSoilTexture();
+      gravelTex.repeat.set(4, 4);
+
+      // Grava drenante (Gravel backfill layer directly behind the concrete stem)
+      const gravelMat = new THREE.MeshStandardMaterial({
+        color: 0x9ca3af,
+        map: gravelTex,
+        roughness: 0.9,
+      });
+
+      const wallLength = 12.0;
+      const gravelWidth = 0.9;
+      const gravelHeight = 5.6;
+
+      const gravelGeo = new THREE.BoxGeometry(gravelWidth, gravelHeight, wallLength - 0.2);
+      const gravelMesh = new THREE.Mesh(gravelGeo, gravelMat);
+      gravelMesh.position.set(0.5 + gravelWidth / 2, 0.8 + gravelHeight / 2, 0);
+      drainageGroup.add(gravelMesh);
+
+      // Tubo perforado de drenaje longitudinal (Perforated drain pipe at the base)
+      const pipeGeo = new THREE.CylinderGeometry(0.2, 0.2, wallLength, 24);
+      pipeGeo.rotateX(Math.PI / 2);
+      const pipeMat = new THREE.MeshStandardMaterial({
+        color: 0xf59e0b,
+        roughness: 0.4,
+        metalness: 0.6
+      });
+      const drainPipe = new THREE.Mesh(pipeGeo, pipeMat);
+      drainPipe.position.set(0.9, 1.1, 0);
+      drainageGroup.add(drainPipe);
+
+      // Mechinales (Weep holes through the concrete stem to relieve hydrostatic pressure)
+      const weepHoleCount = 5;
+      const weepHoleMat = new THREE.MeshStandardMaterial({
+        color: 0x1f2937,
+        roughness: 0.3
+      });
+
+      for (let i = 0; i < weepHoleCount; i++) {
+        const zPos = -4.5 + (i * 2.25);
+        const weepGeo = new THREE.CylinderGeometry(0.09, 0.09, 1.4, 16);
+        weepGeo.rotateZ(Math.PI / 2);
+        const weepMesh = new THREE.Mesh(weepGeo, weepHoleMat);
+        weepMesh.position.set(0, 1.1, zPos);
+        drainageGroup.add(weepMesh);
+
+        // Agua goteando simbólica (pequeño indicador azul de escorrentía)
+        const dripGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.6, 8);
+        const dripMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.8 });
+        const dripMesh = new THREE.Mesh(dripGeo, dripMat);
+        dripMesh.position.set(-0.7, 0.8, zPos);
+        drainageGroup.add(dripMesh);
+      }
+
+      mainModelGroup.add(drainageGroup);
+    }
+  </script>
+
+  <script>
+    function buildPressureDiagram() {
+      pressureGroup = new THREE.Group();
+
+      // Triangular earth pressure wedge arrows (Rankine / Coulomb)
+      const arrowCount = 7;
+      const wallHeight = 6.0;
+      const baseThick = 0.8;
+
+      for (let i = 1; i <= arrowCount; i++) {
+        const fraction = i / arrowCount;
+        const yPos = baseThick + (wallHeight * (1 - fraction));
+        const length = fraction * 2.2; // Presión triangular máxima en la base
+
+        const dir = new THREE.Vector3(-1, 0, 0);
+        const origin = new THREE.Vector3(length + 0.6, yPos, 0);
+        const hex = 0xef4444; // Rojo intenso
+
+        const arrowHelper = new THREE.ArrowHelper(dir, origin, length, hex, 0.25, 0.16);
+        pressureGroup.add(arrowHelper);
+      }
+
+      // Línea triangular envolvente
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 2 });
+      const points = [];
+      points.push(new THREE.Vector3(0.6, baseThick + wallHeight, 0));
+      points.push(new THREE.Vector3(0.6 + 2.2, baseThick, 0));
+      points.push(new THREE.Vector3(0.6, baseThick, 0));
+      points.push(new THREE.Vector3(0.6, baseThick + wallHeight, 0));
+
+      const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+      const pressureLine = new THREE.Line(lineGeo, lineMat);
+      pressureGroup.add(pressureLine);
+
+      mainModelGroup.add(pressureGroup);
+    }
+  </script>
+
+  <script>
+    function initThree() {
+      const container = document.getElementById('canvas-container');
+      const canvas = document.getElementById('wall-canvas');
+
+      // 1. Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0b0f19);
+      scene.fog = new THREE.FogExp2(0x0b0f19, 0.02);
+
+      // 2. Camera
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(-16, 11, 20);
+
+      // 3. Renderer
+      renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      // 4. OrbitControls (Smooth user rotation and interaction)
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.maxDistance = 60;
+      controls.minDistance = 6;
+      controls.target.set(0, 3.2, 0);
+
+      // 5. Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      scene.add(ambientLight);
+
+      // Sun / Directional Light for architectural shadows
+      const sunLight = new THREE.DirectionalLight(0xfffaed, 1.4);
+      sunLight.position.set(18, 28, 22);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = 2048;
+      sunLight.shadow.mapSize.height = 2048;
+      sunLight.shadow.camera.near = 0.5;
+      sunLight.shadow.camera.far = 70;
+      sunLight.shadow.camera.left = -20;
+      sunLight.shadow.camera.right = 20;
+      sunLight.shadow.camera.top = 20;
+      sunLight.shadow.camera.bottom = -20;
+      sunLight.shadow.bias = -0.0005;
+      scene.add(sunLight);
+
+      // Secondary fill light
+      const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.6);
+      fillLight.position.set(-20, 15, -15);
+      scene.add(fillLight);
+
+      // Subtle ground grid
+      const grid = new THREE.GridHelper(50, 50, 0x374151, 0x1f2937);
+      grid.position.y = -0.01;
+      scene.add(grid);
+
+      // 6. Master Model Group
+      mainModelGroup = new THREE.Group();
+      scene.add(mainModelGroup);
+
+      // Build components
+      buildRetainingWall();
+      buildTerrain();
+      buildDrainageSystem();
+      buildPressureDiagram();
+
+      // Window resize
+      window.addEventListener('resize', onWindowResize, false);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+  </script>
+
+  <script>
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      const text = document.getElementById('toast-text');
+      text.textContent = message;
+      toast.classList.remove('opacity-0', 'translate-y-3');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-3');
+      }, 2000);
+    }
+
+    function setupEventListeners() {
+      // Toggle Continuous Rotation
+      const toggleSpinBtn = document.getElementById('btn-toggle-spin');
+      const spinIcon = document.getElementById('spin-icon');
+      const spinText = document.getElementById('spin-text');
+
+      toggleSpinBtn.addEventListener('click', () => {
+        isAutoRotating = !isAutoRotating;
+        if (isAutoRotating) {
+          spinIcon.classList.add('animate-spin');
+          spinText.textContent = 'Giro Activo';
+          toggleSpinBtn.classList.replace('bg-gray-800/80', 'bg-amber-500/20');
+          toggleSpinBtn.classList.replace('text-gray-400', 'text-amber-300');
+          showToast('Giro automático activado');
+        } else {
+          spinIcon.classList.remove('animate-spin');
+          spinText.textContent = 'Giro Pausado';
+          toggleSpinBtn.classList.replace('bg-amber-500/20', 'bg-gray-800/80');
+          toggleSpinBtn.classList.replace('text-amber-300', 'text-gray-400');
+          showToast('Giro automático pausado');
+        }
+      });
+
+      // Rotation Speed Slider
+      const spinSpeedSlider = document.getElementById('slider-spin-speed');
+      const spinSpeedVal = document.getElementById('spin-speed-val');
+      spinSpeedSlider.addEventListener('input', (e) => {
+        rotationSpeed = parseFloat(e.target.value);
+        spinSpeedVal.textContent = rotationSpeed.toFixed(1) + 'x';
+      });
+
+      // Reset Camera
+      document.getElementById('btn-reset-cam').addEventListener('click', () => {
+        camera.position.set(-16, 11, 20);
+        controls.target.set(0, 3.2, 0);
+        controls.update();
+        showToast('Cámara reajustada');
+      });
+
+      // Quick View Presets
+      document.getElementById('view-iso').addEventListener('click', () => {
+        camera.position.set(-15, 12, 18);
+        controls.target.set(0, 3.2, 0);
+        controls.update();
+        showToast('Vista isométrica');
+      });
+
+      document.getElementById('view-section').addEventListener('click', () => {
+        camera.position.set(0, 3.2, 24);
+        controls.target.set(0, 3.2, 0);
+        controls.update();
+        showToast('Corte de perfil');
+      });
+
+      document.getElementById('view-front').addEventListener('click', () => {
+        camera.position.set(-22, 4.0, 0);
+        controls.target.set(0, 3.2, 0);
+        controls.update();
+        showToast('Vista frontal de pantalla');
+      });
+
+      // Layer Toggles
+      document.getElementById('toggle-soil').addEventListener('change', (e) => {
+        soilGroup.visible = e.target.checked;
+      });
+
+      document.getElementById('toggle-soil-transp').addEventListener('change', (e) => {
+        soilTransparent = e.target.checked;
+        soilMaterial.opacity = soilTransparent ? 0.35 : 0.92;
+        grassMaterial.opacity = soilTransparent ? 0.4 : 0.95;
+      });
+
+      document.getElementById('toggle-drainage').addEventListener('change', (e) => {
+        drainageGroup.visible = e.target.checked;
+      });
+
+      document.getElementById('toggle-pressures').addEventListener('change', (e) => {
+        pressureGroup.visible = e.target.checked;
+      });
+
+      // Toggle Side Panel Visibility
+      const togglePanelBtn = document.getElementById('btn-toggle-panel');
+      const mainPanel = document.getElementById('main-panel');
+      togglePanelBtn.addEventListener('click', () => {
+        const isHidden = mainPanel.classList.contains('translate-x-full');
+        if (isHidden) {
+          mainPanel.classList.remove('translate-x-full');
+          mainPanel.classList.add('translate-x-0');
+        } else {
+          mainPanel.classList.remove('translate-x-0');
+          mainPanel.classList.add('translate-x-full');
+        }
+      });
+    }
+  </script>
+
+  <script>
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();
+
+      // Continuous automatic rotation around vertical axis (Y)
+      if (isAutoRotating) {
+        mainModelGroup.rotation.y += delta * 0.35 * rotationSpeed;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // Start application upon load
+    window.onload = function () {
+      initThree();
+      setupEventListeners();
+      animate();
+    };
+  </script>
+</body>
+</html>

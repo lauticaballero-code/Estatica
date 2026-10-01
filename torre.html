@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Torre Inclinada 3D - Esfuerzos de Viento & Estabilidad</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Three.js and OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      overflow: hidden;
+      background-color: #050a14;
+      color: #f3f4f6;
+    }
+    .mono-font {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(56, 189, 248, 0.4);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(56, 189, 248, 0.8);
+    }
+    .glassmorphism {
+      background: rgba(15, 23, 42, 0.84);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6);
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      height: 6px;
+      border-radius: 9999px;
+      background: #334155;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #38bdf8;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
+      transition: transform 0.15s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.9; }
+      50% { transform: scale(1.25); opacity: 0.3; }
+      100% { transform: scale(0.95); opacity: 0.9; }
+    }
+    .pivot-glow {
+      animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+  </style>
+</head>
+
+<body class="h-full w-full select-none overflow-hidden relative">
+
+  <!-- 3D Canvas Container -->
+  <div id="canvas-container" class="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing z-0">
+    <canvas id="tower-canvas" class="w-full h-full block"></canvas>
+  </div>
+
+  <!-- Header Section -->
+  <header class="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none z-10">
+    <div class="glassmorphism pointer-events-auto px-4 py-2.5 rounded-2xl flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-700 flex items-center justify-center shadow-lg shadow-sky-500/20">
+        <i class="fa-solid fa-monument text-white text-lg"></i>
+      </div>
+      <div>
+        <h1 class="text-sm font-bold tracking-wide text-white flex items-center gap-2">
+          TORRE INCLINADA 3D
+          <span class="text-[10px] bg-sky-500/20 text-sky-300 font-semibold px-2 py-0.5 rounded-full border border-sky-500/40">Efecto Viento & Vuelco</span>
+        </h1>
+        <p class="text-xs text-gray-400">Flujo aerodinámico, presión por altura, asiento geotécnico y momento crítico</p>
+      </div>
+    </div>
+
+    <!-- Quick action buttons -->
+    <div class="glassmorphism pointer-events-auto px-3 py-2 rounded-2xl flex items-center gap-2">
+      <button id="btn-lateral-view" title="Vista de Perfil de la Inclinación" class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold border border-amber-500/40 transition">
+        <i class="fa-solid fa-arrows-split-up-and-left text-xs"></i>
+        <span>Perfil Inclinación</span>
+      </button>
+
+      <button id="btn-toggle-particles" class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-xs font-semibold border border-sky-500/40 transition">
+        <i id="wind-stream-icon" class="fa-solid fa-wind text-xs"></i>
+        <span id="wind-stream-text">Líneas de Corriente</span>
+      </button>
+
+      <button id="btn-reset-cam" title="Restablecer Vista" class="w-8 h-8 rounded-xl flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-800 transition">
+        <i class="fa-solid fa-camera-rotate text-xs"></i>
+      </button>
+
+      <button id="btn-toggle-panel" title="Mostrar/Ocultar Menú" class="w-8 h-8 rounded-xl flex items-center justify-center text-sky-400 hover:bg-gray-800 transition">
+        <i class="fa-solid fa-sliders text-xs"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Interactive Controls Side Panel -->
+  <aside id="main-panel" class="absolute top-20 right-4 w-84 sm:w-96 glassmorphism rounded-3xl p-5 overflow-y-auto max-h-[calc(100vh-6rem)] flex flex-col gap-4 z-20 transition-all duration-300 transform translate-x-0">
+    
+    <!-- Realtime Stability & Overturning Safety Meter -->
+    <div class="bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-semibold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+          <i class="fa-solid fa-shield-halved text-emerald-400"></i> Factor de Seguridad al Vuelco
+        </span>
+        <span id="stat-fs" class="text-base font-bold mono-font text-emerald-400">FS = 2.18</span>
+      </div>
+      
+      <!-- Progress Bar -->
+      <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden relative">
+        <div id="fs-bar" class="bg-emerald-500 h-full rounded-full transition-all duration-300" style="width: 72%;"></div>
+      </div>
+      <div class="flex justify-between text-[10px] text-gray-400 mt-1 mono-font">
+        <span>Colapso (&lt;1.0)</span>
+        <span>Crítico (1.5)</span>
+        <span>Estable (&gt;2.0)</span>
+      </div>
+      <p id="fs-status-desc" class="text-[11px] text-emerald-300/90 mt-2">La torre resiste la carga del viento gracias a su centro de gravedad dentro de la base de apoyo.</p>
+    </div>
+
+    <!-- Live Momenta & Force Telemetry -->
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div class="bg-slate-900/80 p-2.5 rounded-2xl border border-slate-800">
+        <span class="block text-gray-400 text-[10px] uppercase font-semibold">Momento Estabilizador (Ms)</span>
+        <span id="stat-ms" class="text-emerald-400 font-bold text-xs mono-font">542,000 kNm</span>
+        <span class="block text-[9px] text-gray-400 mt-0.5">Peso propio del mármol/mampostería</span>
+      </div>
+      <div class="bg-slate-900/80 p-2.5 rounded-2xl border border-slate-800">
+        <span class="block text-gray-400 text-[10px] uppercase font-semibold">Momento Volcador (Mv)</span>
+        <span id="stat-mv" class="text-rose-400 font-bold text-xs mono-font">248,600 kNm</span>
+        <span class="block text-[9px] text-gray-400 mt-0.5">Inclinación propia + empuje eólico</span>
+      </div>
+    </div>
+
+    <!-- Active Wind & Soil Sliders -->
+    <div class="space-y-3.5 border-t border-slate-800 pt-3">
+      <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+        <i class="fa-solid fa-wind text-sky-400"></i> Parámetros de Carga Eólica & Geotécnica
+      </h3>
+
+      <!-- Wind Speed -->
+      <div>
+        <div class="flex justify-between text-xs mb-1.5">
+          <span class="text-gray-300 flex items-center gap-1.5"><i class="fa-solid fa-gauge-high text-sky-400"></i> Velocidad del Viento</span>
+          <span id="val-wind-speed" class="mono-font text-sky-400 font-medium">65 km/h (Brisa Fuerte)</span>
+        </div>
+        <input type="range" id="slider-wind-speed" min="0" max="180" step="2" value="65" class="w-full">
+      </div>
+
+      <!-- Wind Direction (Angle with respect to the lean) -->
+      <div>
+        <div class="flex justify-between text-xs mb-1.5">
+          <span class="text-gray-300 flex items-center gap-1.5"><i class="fa-solid fa-compass text-indigo-400"></i> Dirección del Viento</span>
+          <span id="val-wind-dir" class="mono-font text-indigo-400 font-medium">A favor del desplome (0°)</span>
+        </div>
+        <input type="range" id="slider-wind-dir" min="-180" max="180" step="5" value="0" class="w-full">
+      </div>
+
+      <!-- Inherent Tower Lean (Desplome Geotécnico Inicial) -->
+      <div>
+        <div class="flex justify-between text-xs mb-1.5">
+          <span class="text-gray-300 flex items-center gap-1.5"><i class="fa-solid fa-bezier-curve text-amber-400"></i> Inclinación de la Torre</span>
+          <span id="val-lean-angle" class="mono-font text-amber-400 font-medium">3.97° (4.1 m en cúspide)</span>
+        </div>
+        <input type="range" id="slider-lean-angle" min="0.0" max="9.0" step="0.1" value="3.97" class="w-full">
+      </div>
+
+      <!-- Soil Bearing Capacity / Subgrade Modulus -->
+      <div>
+        <div class="flex justify-between text-xs mb-1.5">
+          <span class="text-gray-300 flex items-center gap-1.5"><i class="fa-solid fa-mountain text-emerald-400"></i> Asiento Diferencial del Suelo</span>
+          <span id="val-soil-softness" class="mono-font text-emerald-400 font-medium">Medio (Arcilla limosa)</span>
+        </div>
+        <input type="range" id="slider-soil-softness" min="0.2" max="2.0" step="0.1" value="1.0" class="w-full">
+      </div>
+    </div>
+
+    <!-- Force Vectors & Diagram Toggles -->
+    <div class="border-t border-slate-800 pt-3 space-y-2">
+      <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+        <i class="fa-solid fa-diagram-project text-amber-400"></i> Diagramas & Capas Visuales
+      </h3>
+
+      <label class="flex items-center justify-between text-xs text-gray-200 p-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800/80 cursor-pointer border border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full bg-rose-500 shadow-md shadow-rose-500/80 inline-block"></span>
+          <div>
+            <span class="font-semibold block">Punto Pivote de Giro (Edge Pivot)</span>
+            <span class="text-[10px] text-gray-400 block">Borde de la zapata circular hacia donde vuelca</span>
+          </div>
+        </div>
+        <input type="checkbox" id="toggle-pivot" checked class="w-4 h-4 accent-sky-500 rounded">
+      </label>
+
+      <label class="flex items-center justify-between text-xs text-gray-200 p-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800/80 cursor-pointer border border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full bg-sky-400 shadow-md shadow-sky-400/80 inline-block"></span>
+          <div>
+            <span class="font-semibold block">Perfil de Presión de Viento (q_z)</span>
+            <span class="text-[10px] text-gray-400 block">Distribución exponencial con la altura</span>
+          </div>
+        </div>
+        <input type="checkbox" id="toggle-wind-arrows" checked class="w-4 h-4 accent-sky-500 rounded">
+      </label>
+
+      <label class="flex items-center justify-between text-xs text-gray-200 p-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800/80 cursor-pointer border border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-md shadow-emerald-500/80 inline-block"></span>
+          <div>
+            <span class="font-semibold block">Centro de Gravedad y Peso (W)</span>
+            <span class="text-[10px] text-gray-400 block">Vector vertical y excentricidad sobre la base</span>
+          </div>
+        </div>
+        <input type="checkbox" id="toggle-cg-vectors" checked class="w-4 h-4 accent-sky-500 rounded">
+      </label>
+
+      <label class="flex items-center justify-between text-xs text-gray-200 p-2.5 rounded-2xl bg-slate-900/60 hover:bg-slate-800/80 cursor-pointer border border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full bg-amber-400 shadow-md shadow-amber-400/80 inline-block"></span>
+          <div>
+            <span class="font-semibold block">Bulbo de Presión Geotécnico</span>
+            <span class="text-[10px] text-gray-400 block">Tensiones diferenciales en los estratos de suelo</span>
+          </div>
+        </div>
+        <input type="checkbox" id="toggle-soil-strata" checked class="w-4 h-4 accent-sky-500 rounded">
+      </label>
+    </div>
+
+    <!-- Predefined Environmental Scenarios -->
+    <div class="border-t border-slate-800 pt-3">
+      <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+        <i class="fa-solid fa-cloud-bolt text-sky-400"></i> Escenarios Críticos
+      </h3>
+      <div class="grid grid-cols-3 gap-1.5 text-xs">
+        <button id="scenario-calm" class="px-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-gray-200 border border-slate-700 transition flex flex-col items-center">
+          <i class="fa-solid fa-sun text-amber-400 text-xs mb-1"></i>
+          <span class="text-[10px]">Calma (20 km/h)</span>
+        </button>
+        <button id="scenario-storm" class="px-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-gray-200 border border-slate-700 transition flex flex-col items-center">
+          <i class="fa-solid fa-wind text-sky-400 text-xs mb-1"></i>
+          <span class="text-[10px]">Temporal (95 km/h)</span>
+        </button>
+        <button id="scenario-hurricane" class="px-2 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-200 border border-rose-800/60 transition flex flex-col items-center">
+          <i class="fa-solid fa-tornado text-rose-400 text-xs mb-1"></i>
+          <span class="text-[10px]">Huracán (150 km/h)</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Instructions Footer -->
+  <footer class="absolute bottom-4 left-4 glassmorphism px-4 py-2 rounded-2xl hidden md:flex items-center gap-4 text-xs text-gray-400 pointer-events-none z-10">
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-computer-mouse text-sky-400"></i> Clic y Arrastre: Rotar</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass-plus text-sky-400"></i> Rueda: Zoom</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-hand text-sky-400"></i> Clic derecho: Paneo</span>
+  </footer>
+
+  <!-- Toast Notification Modal -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 glassmorphism px-5 py-2.5 rounded-full text-xs font-medium text-white shadow-xl opacity-0 pointer-events-none transition-all duration-300 transform translate-y-3 z-50 flex items-center gap-2">
+    <i class="fa-solid fa-circle-check text-sky-400"></i>
+    <span id="toast-text">Vista actualizada</span>
+  </div>
+
+  <script>
+    /* Global Simulation State */
+    let scene, camera, renderer, controls;
+    let masterRoot, towerAssemblyGroup, towerPivotingGroup;
+    let windParticlesMesh, windParticleGeo, windStreamGroup;
+    let pivotMarkerGroup, windArrowsGroup, cgVectorsGroup, soilStrataGroup;
+
+    // Tower Physical & Geometric Constants
+    const TOWER_HEIGHT = 56.0;      // Real height: ~56 m
+    const TOWER_OUTER_RADIUS = 7.74; // Diameter ~15.48 m at base
+    const TOWER_INNER_RADIUS = 3.65; // Hollow interior cylindrical core
+    const FOUNDATION_RADIUS = 9.8;  // Annular foundation radius
+    const TOWER_TOTAL_MASS = 14500; // ~14,500 metric tons
+    const TOWER_WEIGHT_KN = TOWER_TOTAL_MASS * 9.81; // ~142,245 kN
+
+    // Simulation Parameters
+    let windSpeedKmH = 65.0;        // Wind velocity in km/h
+    let windDirectionDeg = 0.0;     // 0° pushes exactly towards the lean direction (+X)
+    let leanAngleDeg = 3.97;        // Famous historic lean angle (~4 degrees)
+    let soilSoftness = 1.0;         // Geotechnical elasticity factor
+    let showWindParticles = true;
+    let dynamicWobble = 0.0;        // High-frequency turbulent oscillation
+
+    // Textures & Materials
+    let matMarbleTier, matMarbleColumns, matDarkStone, matSoilClay, matSoilSand;
+
+    // Procedural Marble Texture Generator
+    function createMarbleTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      // Warm Italian Carrara marble base tone
+      ctx.fillStyle = '#e2dfd2';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Veins & mineral noise
+      for (let i = 0; i < 40000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const c = 210 + Math.floor(Math.random() * 35);
+        ctx.fillStyle = `rgb(${c}, ${c - 8}, ${c - 16})`;
+        ctx.fillRect(x, y, 2, 2);
+      }
+
+      // Elegant weathered veining
+      ctx.strokeStyle = 'rgba(120, 113, 108, 0.28)';
+      ctx.lineWidth = 4;
+      for (let v = 0; v < 8; v++) {
+        ctx.beginPath();
+        let curX = Math.random() * 512;
+        let curY = 0;
+        ctx.moveTo(curX, curY);
+        while (curY < 512) {
+          curX += (Math.random() - 0.5) * 45;
+          curY += 25 + Math.random() * 35;
+          ctx.lineTo(curX, curY);
+        }
+        ctx.stroke();
+      }
+
+      // Horizontal masonry block mortar seams
+      ctx.strokeStyle = 'rgba(92, 85, 78, 0.45)';
+      ctx.lineWidth = 2;
+      for (let y = 32; y < 512; y += 48) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(512, y);
+        ctx.stroke();
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    }
+
+    // Geotechnical Stratigraphy Texture
+    function createSoilTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#3f3127'; // Dark silty clay
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Sand / alluvial layer bands
+      for (let y = 0; y < 512; y++) {
+        const sandFrac = Math.sin(y * 0.08) * 0.5 + 0.5;
+        const r = Math.floor(65 + sandFrac * 60);
+        const g = Math.floor(50 + sandFrac * 45);
+        const b = Math.floor(35 + sandFrac * 30);
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillRect(0, y, 512, 1);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    }
+  </script>
+
+  <script>
+    function buildLeaningTower() {
+      towerAssemblyGroup = new THREE.Group();
+      towerPivotingGroup = new THREE.Group();
+
+      const marbleTex = createMarbleTexture();
+      marbleTex.repeat.set(2, 3);
+
+      matMarbleTier = new THREE.MeshStandardMaterial({
+        map: marbleTex,
+        roughness: 0.72,
+        metalness: 0.1
+      });
+
+      matMarbleColumns = new THREE.MeshStandardMaterial({
+        color: 0xf1efe7,
+        roughness: 0.5,
+        metalness: 0.15
+      });
+
+      matDarkStone = new THREE.MeshStandardMaterial({
+        color: 0x3d3935,
+        roughness: 0.8
+      });
+
+      // 1. Annular Ring Foundation (Zapata anular de 19.6m de diámetro)
+      const baseGeo = new THREE.CylinderGeometry(FOUNDATION_RADIUS, FOUNDATION_RADIUS + 0.8, 3.2, 48);
+      const baseMesh = new THREE.Mesh(baseGeo, matMarbleTier);
+      baseMesh.position.y = 1.6;
+      baseMesh.receiveShadow = true;
+      baseMesh.castShadow = true;
+      towerPivotingGroup.add(baseMesh);
+
+      // 2. Lowest Level (Piso inferior ciego con arcadas ciegas)
+      const level1Height = 8.8;
+      const level1Geo = new THREE.CylinderGeometry(TOWER_OUTER_RADIUS, TOWER_OUTER_RADIUS, level1Height, 48);
+      const level1Mesh = new THREE.Mesh(level1Geo, matMarbleTier);
+      level1Mesh.position.y = 3.2 + level1Height / 2;
+      level1Mesh.castShadow = true;
+      level1Mesh.receiveShadow = true;
+      towerPivotingGroup.add(level1Mesh);
+
+      // 3. Middle 6 Arcaded Colonnade Galleries (Galerías de columnatas abiertas)
+      const galleryCount = 6;
+      const galleryHeight = 5.8;
+      let currentElev = 3.2 + level1Height;
+
+      for (let g = 0; g < galleryCount; g++) {
+        // Inner cylinder drum wall
+        const innerDrumRadius = TOWER_OUTER_RADIUS - 1.25;
+        const drumGeo = new THREE.CylinderGeometry(innerDrumRadius, innerDrumRadius, galleryHeight, 36);
+        const drumMesh = new THREE.Mesh(drumGeo, matMarbleTier);
+        drumMesh.position.y = currentElev + galleryHeight / 2;
+        drumMesh.castShadow = true;
+        towerPivotingGroup.add(drumMesh);
+
+        // Circular floor slab cornice
+        const corniceGeo = new THREE.CylinderGeometry(TOWER_OUTER_RADIUS + 0.35, TOWER_OUTER_RADIUS + 0.35, 0.6, 48);
+        const cornice = new THREE.Mesh(corniceGeo, matMarbleColumns);
+        cornice.position.y = currentElev + 0.3;
+        cornice.castShadow = true;
+        towerPivotingGroup.add(cornice);
+
+        // Ring of 30 classical exterior columns around gallery
+        const columnCount = 30;
+        const colRadius = 0.22;
+        const colHeight = galleryHeight - 0.7;
+        const colGeo = new THREE.CylinderGeometry(colRadius, colRadius * 1.15, colHeight, 12);
+
+        for (let c = 0; c < columnCount; c++) {
+          const theta = (c / columnCount) * Math.PI * 2;
+          const colMesh = new THREE.Mesh(colGeo, matMarbleColumns);
+          const colX = Math.cos(theta) * (TOWER_OUTER_RADIUS - 0.15);
+          const colZ = Math.sin(theta) * (TOWER_OUTER_RADIUS - 0.15);
+          colMesh.position.set(colX, currentElev + 0.6 + colHeight / 2, colZ);
+          colMesh.castShadow = true;
+          towerPivotingGroup.add(colMesh);
+        }
+
+        currentElev += galleryHeight;
+      }
+
+      // 4. Belfry (Campanario superior con campanas de bronce)
+      const belfryHeight = 9.2;
+      const belfryRadius = TOWER_OUTER_RADIUS - 1.6;
+      const belfryGeo = new THREE.CylinderGeometry(belfryRadius, belfryRadius, belfryHeight, 36);
+      const belfryMesh = new THREE.Mesh(belfryGeo, matMarbleTier);
+      belfryMesh.position.y = currentElev + belfryHeight / 2;
+      belfryMesh.castShadow = true;
+      towerPivotingGroup.add(belfryMesh);
+
+      // Campanario Arches & bells
+      const belfryCornice = new THREE.Mesh(
+        new THREE.CylinderGeometry(belfryRadius + 0.5, belfryRadius + 0.5, 0.7, 36),
+        matMarbleColumns
+      );
+      belfryCornice.position.y = currentElev + belfryHeight;
+      towerPivotingGroup.add(belfryCornice);
+
+      // Bronze Bell inside belfry
+      const bellGeo = new THREE.CylinderGeometry(0.7, 1.4, 2.0, 16);
+      const bellMat = new THREE.MeshStandardMaterial({ color: 0xcd7f32, metalness: 0.85, roughness: 0.3 });
+      const bellMesh = new THREE.Mesh(bellGeo, bellMat);
+      bellMesh.position.y = currentElev + belfryHeight / 2;
+      towerPivotingGroup.add(bellMesh);
+
+      // Attach pivoting group into assembly
+      towerAssemblyGroup.add(towerPivotingGroup);
+      masterRoot.add(towerAssemblyGroup);
+    }
+  </script>
+
+  <script>
+    function buildGroundAndGeology() {
+      // 1. Piazza Lawn (Campo dei Miracoli)
+      const groundGeo = new THREE.PlaneGeometry(160, 160, 32, 32);
+      const groundMat = new THREE.MeshStandardMaterial({
+        color: 0x224a27, // Lush green lawn of Piazza dei Miracoli
+        roughness: 0.95,
+        metalness: 0.05
+      });
+      const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+      groundMesh.rotation.x = -Math.PI / 2;
+      groundMesh.position.y = 0.0;
+      groundMesh.receiveShadow = true;
+      masterRoot.add(groundMesh);
+
+      // Marble paved walkway ring around the tower
+      const plazaRingGeo = new THREE.RingGeometry(FOUNDATION_RADIUS + 0.5, FOUNDATION_RADIUS + 8.0, 48);
+      const plazaRingMat = new THREE.MeshStandardMaterial({
+        color: 0xd6d3cc,
+        roughness: 0.85
+      });
+      const plazaRing = new THREE.Mesh(plazaRingGeo, plazaRingMat);
+      plazaRing.rotation.x = -Math.PI / 2;
+      plazaRing.position.y = 0.02;
+      plazaRing.receiveShadow = true;
+      masterRoot.add(plazaRing);
+
+      // 2. Subterranean Stratigraphic Cutaway (Geotechnical Soil Layers)
+      soilStrataGroup = new THREE.Group();
+
+      const soilTex = createSoilTexture();
+      soilTex.repeat.set(2, 2);
+      matSoilClay = new THREE.MeshStandardMaterial({
+        map: soilTex,
+        roughness: 0.9,
+        side: THREE.DoubleSide
+      });
+
+      // Exposed geological trench revealing the compressible soft clay and silt
+      const trenchGeo = new THREE.BoxGeometry(34, 18, 34);
+      const trenchMesh = new THREE.Mesh(trenchGeo, matSoilClay);
+      trenchMesh.position.set(0, -9.0, 0);
+      soilStrataGroup.add(trenchMesh);
+
+      // Geotechnical Settlement Bulb Lines (Bulbos de presión en el suelo bajo el borde comprimido)
+      const bulbGeo = new THREE.TorusGeometry(FOUNDATION_RADIUS * 0.75, 0.25, 12, 32);
+      bulbGeo.rotateX(Math.PI / 2);
+      const bulbMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.65 });
+      const bulbMesh1 = new THREE.Mesh(bulbGeo, bulbMat);
+      bulbMesh1.position.set(FOUNDATION_RADIUS * 0.45, -2.5, 0);
+      soilStrataGroup.add(bulbMesh1);
+
+      const bulbMesh2 = new THREE.Mesh(bulbGeo, bulbMat);
+      bulbMesh2.scale.set(1.4, 1.4, 1.4);
+      bulbMesh2.position.set(FOUNDATION_RADIUS * 0.45, -5.5, 0);
+      soilStrataGroup.add(bulbMesh2);
+
+      masterRoot.add(soilStrataGroup);
+    }
+  </script>
+
+  <script>
+    function buildWindFieldParticles() {
+      windStreamGroup = new THREE.Group();
+
+      const particleCount = 650;
+      windParticleGeo = new THREE.BufferGeometry();
+      const positions = new Float32Array(particleCount * 3);
+      const velocities = new Float32Array(particleCount * 3);
+      const opacities = new Float32Array(particleCount);
+
+      // Distribute particles across an upstream wind plane
+      for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        positions[i3] = -45.0 - Math.random() * 20.0; // Upstream in -X
+        positions[i3 + 1] = Math.random() * (TOWER_HEIGHT + 10.0); // Heights 0 to 66m
+        positions[i3 + 2] = (Math.random() - 0.5) * 50.0; // Lateral spread
+
+        velocities[i3] = 1.0;
+        opacities[i] = 0.3 + Math.random() * 0.7;
+      }
+
+      windParticleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      windParticleGeo.userData = { velocities: velocities, originalX: positions.slice() };
+
+      const windMat = new THREE.PointsMaterial({
+        color: 0x38bdf8,
+        size: 0.95,
+        transparent: true,
+        opacity: 0.75,
+        blending: THREE.AdditiveBlending
+      });
+
+      windParticlesMesh = new THREE.Points(windParticleGeo, windMat);
+      windStreamGroup.add(windParticlesMesh);
+      masterRoot.add(windStreamGroup);
+    }
+
+    function updateWindParticles(delta, speedFactor) {
+      if (!windParticleGeo || !showWindParticles) return;
+
+      const pos = windParticleGeo.attributes.position.array;
+      const count = pos.length / 3;
+      const speed = speedFactor * 0.65;
+
+      // Wind direction angle rotation
+      const windAngleRad = (windDirectionDeg * Math.PI) / 180.0;
+      const cosW = Math.cos(windAngleRad);
+      const sinW = Math.sin(windAngleRad);
+
+      for (let i = 0; i < count; i++) {
+        const i3 = i * 3;
+        
+        // Move along wind direction
+        pos[i3] += cosW * speed;
+        pos[i3 + 2] += sinW * speed;
+
+        // Aerodynamic flow deflection around the cylindrical tower obstacle
+        const xDist = pos[i3];
+        const zDist = pos[i3 + 2];
+        const distFromCenter = Math.sqrt(xDist * xDist + zDist * zDist);
+
+        if (distFromCenter < (TOWER_OUTER_RADIUS + 2.5) && pos[i3 + 1] < TOWER_HEIGHT) {
+          // Push particles outwards along normal to simulate boundary layer deflection
+          const pushAngle = Math.atan2(zDist, xDist);
+          pos[i3] += Math.cos(pushAngle) * 0.6;
+          pos[i3 + 2] += Math.sin(pushAngle) * 0.6;
+        }
+
+        // Respawn when crossing downstream boundary
+        if (pos[i3] > 55.0 || pos[i3] < -65.0 || pos[i3 + 2] > 45.0 || pos[i3 + 2] < -45.0) {
+          pos[i3] = -45.0 - Math.random() * 15.0;
+          pos[i3 + 1] = Math.random() * (TOWER_HEIGHT + 10.0);
+          pos[i3 + 2] = (Math.random() - 0.5) * 50.0;
+        }
+      }
+
+      windParticleGeo.attributes.position.needsUpdate = true;
+    }
+  </script>
+
+  <script>
+    function buildPhysicsOverlays() {
+      // 1. Pivot Point Marker (Edge of circular foundation towards leaning azimuth)
+      pivotMarkerGroup = new THREE.Group();
+
+      const pivotSphereGeo = new THREE.SphereGeometry(0.75, 24, 24);
+      const pivotSphereMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e });
+      const pivotSphere = new THREE.Mesh(pivotSphereGeo, pivotSphereMat);
+      pivotSphere.position.set(FOUNDATION_RADIUS, 0.4, 0); // Leaning edge
+      pivotMarkerGroup.add(pivotSphere);
+
+      // Pulsing outer halo ring
+      const ringGeo = new THREE.RingGeometry(1.2, 1.6, 32);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e, side: THREE.DoubleSide });
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.rotation.x = Math.PI / 2;
+      ringMesh.position.set(FOUNDATION_RADIUS, 0.45, 0);
+      pivotMarkerGroup.add(ringMesh);
+
+      // Overturning tendency arc arrow around pivot
+      const arcPoints = [];
+      for (let a = 20; a <= 150; a += 5) {
+        const rad = (a * Math.PI) / 180;
+        arcPoints.push(new THREE.Vector3(FOUNDATION_RADIUS + Math.cos(rad) * 4.2, Math.sin(rad) * 4.2, 0));
+      }
+      const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints);
+      const arcMat = new THREE.LineBasicMaterial({ color: 0xf43f5e, linewidth: 3 });
+      const arcLine = new THREE.Line(arcGeo, arcMat);
+      pivotMarkerGroup.add(arcLine);
+
+      masterRoot.add(pivotMarkerGroup);
+
+      // 2. Wind Pressure Force Arrows Group
+      windArrowsGroup = new THREE.Group();
+      masterRoot.add(windArrowsGroup);
+
+      // 3. Center of Gravity & Self-Weight Vectors Group
+      cgVectorsGroup = new THREE.Group();
+      masterRoot.add(cgVectorsGroup);
+    }
+
+    function updatePhysicsOverlays(data) {
+      // Clear previous procedural arrows
+      while (windArrowsGroup.children.length > 0) {
+        const obj = windArrowsGroup.children[0];
+        if (obj.geometry) obj.geometry.dispose();
+        windArrowsGroup.remove(obj);
+      }
+      while (cgVectorsGroup.children.length > 0) {
+        const obj = cgVectorsGroup.children[0];
+        if (obj.geometry) obj.geometry.dispose();
+        cgVectorsGroup.remove(obj);
+      }
+
+      // A. Wind Pressure Profile Arrows (q_z increases with elevation Z^alpha)
+      const windLevels = 8;
+      const windAngleRad = (windDirectionDeg * Math.PI) / 180.0;
+      const windDirNorm = new THREE.Vector3(Math.cos(windAngleRad), 0, Math.sin(windAngleRad));
+
+      for (let l = 1; l <= windLevels; l++) {
+        const frac = l / windLevels;
+        const elevY = frac * TOWER_HEIGHT;
+        // Atmospheric power law: higher speed at top of tower
+        const heightFactor = Math.pow(elevY / TOWER_HEIGHT, 0.28);
+        const arrowLength = Math.max(1.5, (windSpeedKmH / 180.0) * 12.0 * heightFactor);
+
+        // Arrows push towards the tower along wind direction
+        const arrowOrigin = new THREE.Vector3(
+          -windDirNorm.x * (TOWER_OUTER_RADIUS + arrowLength + 1.5),
+          elevY,
+          -windDirNorm.z * (TOWER_OUTER_RADIUS + arrowLength + 1.5)
+        );
+
+        const arrowHelper = new THREE.ArrowHelper(windDirNorm, arrowOrigin, arrowLength, 0x38bdf8, 1.0, 0.6);
+        windArrowsGroup.add(arrowHelper);
+      }
+
+      // Resultant Aerodynamic Wind Force (F_wind) acting at aerodynamic center (~0.58 H)
+      const resY = TOWER_HEIGHT * 0.58;
+      const resOrigin = new THREE.Vector3(
+        -windDirNorm.x * (TOWER_OUTER_RADIUS + 9.5),
+        resY,
+        -windDirNorm.z * (TOWER_OUTER_RADIUS + 9.5)
+      );
+      const resArrow = new THREE.ArrowHelper(windDirNorm, resOrigin, 8.5, 0x0284c7, 1.6, 0.9);
+      windArrowsGroup.add(resArrow);
+
+      // B. Center of Gravity (CG) and Self-Weight Vector (W)
+      // CG height is at ~0.42 of height because of hollow interior and lighter belfry
+      const cgHeight = TOWER_HEIGHT * 0.42;
+      const totalLeanRad = (leanAngleDeg * Math.PI) / 180.0;
+      const cgEccentricity = Math.sin(totalLeanRad) * cgHeight; // Horizontal shift towards +X
+
+      const cgPos = new THREE.Vector3(cgEccentricity, Math.cos(totalLeanRad) * cgHeight, 0);
+
+      // Sphere at CG
+      const cgSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.75, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0x10b981 })
+      );
+      cgSphere.position.copy(cgPos);
+      cgVectorsGroup.add(cgSphere);
+
+      // Vertical Gravity Vector (W) pointing straight down to ground
+      const wDir = new THREE.Vector3(0, -1, 0);
+      const wArrow = new THREE.ArrowHelper(wDir, cgPos, cgPos.y + 2.0, 0x10b981, 1.4, 0.8);
+      cgVectorsGroup.add(wArrow);
+
+      // Plumb line reference from CG to foundation base
+      const plumbPoints = [
+        cgPos.clone(),
+        new THREE.Vector3(cgEccentricity, 0, 0),
+        new THREE.Vector3(0, 0, 0)
+      ];
+      const plumbGeo = new THREE.BufferGeometry().setFromPoints(plumbPoints);
+      const plumbLine = new THREE.Line(plumbGeo, new THREE.LineDashedMaterial({
+        color: 0x34d399,
+        dashSize: 0.6,
+        gapSize: 0.35
+      }));
+      plumbLine.computeLineDistances();
+      cgVectorsGroup.add(plumbLine);
+
+      // Overturning Lever Arm indicator from line of weight to pivot point
+      const armPoints = [
+        new THREE.Vector3(cgEccentricity, 0, 0),
+        new THREE.Vector3(FOUNDATION_RADIUS, 0, 0)
+      ];
+      const armGeo = new THREE.BufferGeometry().setFromPoints(armPoints);
+      const armLine = new THREE.Line(armGeo, new THREE.LineBasicMaterial({ color: 0xf59e0b, linewidth: 3 }));
+      cgVectorsGroup.add(armLine);
+    }
+  </script>
+
+  <script>
+    function initThree() {
+      const container = document.getElementById('canvas-container');
+      const canvas = document.getElementById('tower-canvas');
+
+      // 1. Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x050a14);
+      scene.fog = new THREE.FogExp2(0x050a14, 0.009);
+
+      // 2. Camera
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(55, 34, 65);
+
+      // 3. Renderer
+      renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      // 4. OrbitControls
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxDistance = 240;
+      controls.minDistance = 10;
+      controls.target.set(0, 24.0, 0);
+
+      // 5. Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      scene.add(ambientLight);
+
+      // Warm Tuscan Mediterranean Sun Light
+      const sunLight = new THREE.DirectionalLight(0xfffaed, 1.45);
+      sunLight.position.set(40, 70, 50);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.width = 2048;
+      sunLight.shadow.mapSize.height = 2048;
+      sunLight.shadow.camera.near = 0.5;
+      sunLight.shadow.camera.far = 200;
+      sunLight.shadow.camera.left = -50;
+      sunLight.shadow.camera.right = 50;
+      sunLight.shadow.camera.top = 70;
+      sunLight.shadow.camera.bottom = -20;
+      sunLight.shadow.bias = -0.0004;
+      scene.add(sunLight);
+
+      // Atmospheric Sky Blue Fill Light
+      const skyLight = new THREE.DirectionalLight(0x38bdf8, 0.45);
+      skyLight.position.set(-50, 40, -40);
+      scene.add(skyLight);
+
+      // 6. Master Scene Group
+      masterRoot = new THREE.Group();
+      scene.add(masterRoot);
+
+      // Build components
+      buildLeaningTower();
+      buildGroundAndGeology();
+      buildWindFieldParticles();
+      buildPhysicsOverlays();
+
+      // Initial Calculations & Render
+      calculateAndRenderStability();
+
+      // Resize listener
+      window.addEventListener('resize', onWindowResize, false);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+  </script>
+
+  <script>
+    function calculateStability() {
+      // 1. Aerodynamic Wind Drag Force (F_wind in kN)
+      // Dynamic pressure: q = 0.5 * rho * v^2 (with air density rho = 1.225 kg/m3)
+      const windSpeedMS = windSpeedKmH / 3.6;
+      const q = 0.5 * 1.225 * Math.pow(windSpeedMS, 2); // N/m2 = Pa
+
+      // Projected frontal area of cylinder A = D * H ~ 15.48m * 56m = 866.8 m2
+      const projectedArea = (TOWER_OUTER_RADIUS * 2) * TOWER_HEIGHT;
+      const dragCoefficientCd = 0.85; // Cylinder drag coefficient with surface roughness
+      const F_wind_total = (q * projectedArea * dragCoefficientCd) / 1000.0; // in kN
+
+      // Aerodynamic center of pressure acting at height h_wind
+      const h_wind = TOWER_HEIGHT * 0.58; // ~32.5 m
+
+      // Projection of wind in the lean direction (+X axis)
+      const windAngleRad = (windDirectionDeg * Math.PI) / 180.0;
+      const F_wind_lean = F_wind_total * Math.cos(windAngleRad);
+
+      // Overturning moment from wind force about the base pivot edge (X = FOUNDATION_RADIUS)
+      const Mv_wind = Math.max(0, F_wind_lean * h_wind);
+
+      // 2. Overturning Moment from Tower Lean / Self-Weight (Mv_weight)
+      // CG height:
+      const h_cg = TOWER_HEIGHT * 0.42; // ~23.5 m
+      const leanRad = (leanAngleDeg * Math.PI) / 180.0;
+      const horizontalCgShift = Math.sin(leanRad) * h_cg; // Distance from vertical centerline
+
+      // The stabilizing moment about the edge pivot (X = FOUNDATION_RADIUS) is provided
+      // by the self-weight acting with a restoring lever arm: (FOUNDATION_RADIUS - horizontalCgShift)
+      const restoringLeverArm = FOUNDATION_RADIUS - horizontalCgShift;
+
+      // When restoringLeverArm > 0, Weight creates a Stabilizing Moment (Ms).
+      // If the CG passes beyond the edge (horizontalCgShift > FOUNDATION_RADIUS), the tower self-topples.
+      const Ms_weight = Math.max(0, TOWER_WEIGHT_KN * Math.max(0, restoringLeverArm));
+
+      // Overturning moment generated by the lean eccentricity relative to center:
+      const Mv_lean_relative = TOWER_WEIGHT_KN * horizontalCgShift;
+
+      // Additional dynamic geotechnical tilt caused by soft soil settlement under high moment:
+      const geotechnicalDeformation = (Mv_wind / 450000.0) * soilSoftness * 0.45; // Degrees of extra tilt
+
+      // Total Moments about the pivot edge:
+      // Moment resisting overturning = Ms_weight
+      // Moment driving overturning = Mv_wind + geotechnical destabilization
+      const totalMs = Ms_weight;
+      const totalMv = Math.max(1000, Mv_wind + (TOWER_WEIGHT_KN * (horizontalCgShift * 0.35)));
+
+      // Factor of Safety against Overturning: FS = Ms / Mv
+      let FS = totalMs / Math.max(1.0, totalMv);
+      if (restoringLeverArm <= 0) {
+        FS = 0.0; // Complete self-weight collapse
+      }
+
+      return {
+        FS: FS,
+        Ms: totalMs,
+        Mv: totalMv,
+        F_wind: F_wind_total,
+        F_wind_lean: F_wind_lean,
+        cgShift: horizontalCgShift,
+        restoringArm: restoringLeverArm,
+        effectiveLean: leanAngleDeg + geotechnicalDeformation,
+        dynamicWobbleScale: (windSpeedKmH / 180.0) * 0.008
+      };
+    }
+
+    function calculateAndRenderStability() {
+      const data = calculateStability();
+
+      // Apply physical lean angle around base Z-axis (local origin is at base center)
+      const currentLeanRad = (data.effectiveLean * Math.PI) / 180.0;
+      towerPivotingGroup.rotation.z = -currentLeanRad; // Negative rotation tilts towards +X
+
+      // Update DOM Telemetry
+      const statFs = document.getElementById('stat-fs');
+      const fsBar = document.getElementById('fs-bar');
+      const fsDesc = document.getElementById('fs-status-desc');
+
+      statFs.textContent = `FS = ${data.FS.toFixed(2)}`;
+      document.getElementById('stat-ms').textContent = Math.round(data.Ms).toLocaleString() + ' kNm';
+      document.getElementById('stat-mv').textContent = Math.round(data.Mv).toLocaleString() + ' kNm';
+
+      // Bar width & alert color states
+      const barPercent = Math.min(100, Math.max(4, (data.FS / 3.0) * 100));
+      fsBar.style.width = barPercent + '%';
+
+      if (data.FS >= 2.0) {
+        statFs.className = 'text-base font-bold mono-font text-emerald-400';
+        fsBar.className = 'bg-emerald-500 h-full rounded-full transition-all duration-300';
+        fsDesc.textContent = 'Estado estructural: Seguro. El centro de gravedad cae bien dentro del tercio central de la zapata y el viento no compromete el equilibrio.';
+        fsDesc.className = 'text-[11px] text-emerald-300/90 mt-2';
+      } else if (data.FS >= 1.5) {
+        statFs.className = 'text-base font-bold mono-font text-amber-400';
+        fsBar.className = 'bg-amber-500 h-full rounded-full transition-all duration-300';
+        fsDesc.textContent = 'Precaución: El empuje eólico reduce el margen de seguridad y genera sobrepresión en el borde de cimentación de sotavento.';
+        fsDesc.className = 'text-[11px] text-amber-300/90 mt-2';
+      } else if (data.FS >= 1.0) {
+        statFs.className = 'text-base font-bold mono-font text-rose-400';
+        fsBar.className = 'bg-rose-500 h-full rounded-full transition-all duration-300';
+        fsDesc.textContent = '¡ALERTA CRÍTICA! Factor de seguridad por debajo de 1.5. Riesgo inminente de plastificación del suelo y despegue en el borde opuesto.';
+        fsDesc.className = 'text-[11px] text-rose-400 font-semibold mt-2';
+      } else {
+        statFs.className = 'text-base font-bold mono-font text-red-500 animate-pulse';
+        fsBar.className = 'bg-red-600 h-full rounded-full transition-all duration-300';
+        fsDesc.textContent = '¡FALLO ESTRUCTURAL POR VUELCO! El momento volcador supera la capacidad estabilizadora. La torre colapsa sobre su borde.';
+        fsDesc.className = 'text-[11px] text-red-400 font-bold mt-2';
+      }
+
+      // Update vectors and visual arrows
+      updatePhysicsOverlays(data);
+    }
+  </script>
+
+  <script>
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const text = document.getElementById('toast-text');
+      text.textContent = msg;
+      toast.classList.remove('opacity-0', 'translate-y-3');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-3');
+      }, 2200);
+    }
+
+    function setupEventListeners() {
+      // 1. Wind Speed Slider
+      const sliderWind = document.getElementById('slider-wind-speed');
+      const valWind = document.getElementById('val-wind-speed');
+      sliderWind.addEventListener('input', (e) => {
+        windSpeedKmH = parseFloat(e.target.value);
+        let category = 'Calma';
+        if (windSpeedKmH > 120) category = 'Huracán F1';
+        else if (windSpeedKmH > 85) category = 'Temporal Duro';
+        else if (windSpeedKmH > 50) category = 'Brisa Fuerte';
+        else if (windSpeedKmH > 25) category = 'Brisa Moderada';
+        valWind.textContent = `${windSpeedKmH.toFixed(0)} km/h (${category})`;
+        calculateAndRenderStability();
+      });
+
+      // 2. Wind Direction Slider
+      const sliderDir = document.getElementById('slider-wind-dir');
+      const valDir = document.getElementById('val-wind-dir');
+      sliderDir.addEventListener('input', (e) => {
+        windDirectionDeg = parseFloat(e.target.value);
+        let desc = `${windDirectionDeg}°`;
+        if (Math.abs(windDirectionDeg) < 15) desc = 'A favor del desplome (0°)';
+        else if (Math.abs(windDirectionDeg - 180) < 15 || Math.abs(windDirectionDeg + 180) < 15) desc = 'En contra del desplome (180°)';
+        else if (windDirectionDeg > 0) desc = `Lateral derecho (+${windDirectionDeg}°)`;
+        else desc = `Lateral izquierdo (${windDirectionDeg}°)`;
+        valDir.textContent = desc;
+        calculateAndRenderStability();
+      });
+
+      // 3. Lean Angle Slider
+      const sliderLean = document.getElementById('slider-lean-angle');
+      const valLean = document.getElementById('val-lean-angle');
+      sliderLean.addEventListener('input', (e) => {
+        leanAngleDeg = parseFloat(e.target.value);
+        const apexDisplacement = Math.sin((leanAngleDeg * Math.PI) / 180) * TOWER_HEIGHT;
+        valLean.textContent = `${leanAngleDeg.toFixed(2)}° (${apexDisplacement.toFixed(1)} m en cúspide)`;
+        calculateAndRenderStability();
+      });
+
+      // 4. Soil Softness Slider
+      const sliderSoil = document.getElementById('slider-soil-softness');
+      const valSoil = document.getElementById('val-soil-softness');
+      sliderSoil.addEventListener('input', (e) => {
+        soilSoftness = parseFloat(e.target.value);
+        valSoil.textContent = soilSoftness < 0.6 ? 'Rígido (Roca)' : soilSoftness > 1.4 ? 'Blando (Limo compresible)' : 'Medio (Arcilla limosa)';
+        calculateAndRenderStability();
+      });
+
+      // Visual Toggles
+      document.getElementById('toggle-pivot').addEventListener('change', (e) => {
+        pivotMarkerGroup.visible = e.target.checked;
+        showToast(e.target.checked ? 'Punto pivote de giro activado' : 'Punto pivote oculto');
+      });
+
+      document.getElementById('toggle-wind-arrows').addEventListener('change', (e) => {
+        windArrowsGroup.visible = e.target.checked;
+        showToast(e.target.checked ? 'Perfil de presión de viento visible' : 'Perfil de viento oculto');
+      });
+
+      document.getElementById('toggle-cg-vectors').addEventListener('change', (e) => {
+        cgVectorsGroup.visible = e.target.checked;
+        showToast(e.target.checked ? 'Centro de gravedad y peso visibles' : 'Vectores de peso ocultos');
+      });
+
+      document.getElementById('toggle-soil-strata').addEventListener('change', (e) => {
+        soilStrataGroup.visible = e.target.checked;
+        showToast(e.target.checked ? 'Bulbo geotécnico visible' : 'Bulbo geotécnico oculto');
+      });
+
+      // Wind Stream Particles Toggle
+      const btnWindStream = document.getElementById('btn-toggle-particles');
+      const windStreamText = document.getElementById('wind-stream-text');
+      btnWindStream.addEventListener('click', () => {
+        showWindParticles = !showWindParticles;
+        windStreamGroup.visible = showWindParticles;
+        if (showWindParticles) {
+          windStreamText.textContent = 'Líneas de Corriente';
+          btnWindStream.classList.replace('bg-slate-800', 'bg-sky-500/20');
+          btnWindStream.classList.replace('text-gray-400', 'text-sky-300');
+          showToast('Flujo eólico aerodinámico activado');
+        } else {
+          windStreamText.textContent = 'Líneas Pausadas';
+          btnWindStream.classList.replace('bg-sky-500/20', 'bg-slate-800');
+          btnWindStream.classList.replace('text-sky-300', 'text-gray-400');
+          showToast('Líneas de corriente ocultas');
+        }
+      });
+
+      // Quick View of Lean Profile (Lateral alignment perpendicular to lean axis)
+      document.getElementById('btn-lateral-view').addEventListener('click', () => {
+        camera.position.set(0, 26, 92);
+        controls.target.set(2.5, 26, 0);
+        controls.update();
+        showToast('Vista lateral del perfil de inclinación');
+      });
+
+      // Presets & Scenarios
+      document.getElementById('scenario-calm').addEventListener('click', () => {
+        windSpeedKmH = 20.0;
+        windDirectionDeg = 0.0;
+        leanAngleDeg = 3.97;
+        soilSoftness = 0.8;
+        syncSliders();
+        calculateAndRenderStability();
+        showToast('Escenario: Día soleado en calma (20 km/h)');
+      });
+
+      document.getElementById('scenario-storm').addEventListener('click', () => {
+        windSpeedKmH = 95.0;
+        windDirectionDeg = 0.0;
+        leanAngleDeg = 4.3;
+        soilSoftness = 1.3;
+        syncSliders();
+        calculateAndRenderStability();
+        showToast('Escenario: Temporal severo con ráfagas');
+      });
+
+      document.getElementById('scenario-hurricane').addEventListener('click', () => {
+        windSpeedKmH = 150.0;
+        windDirectionDeg = 0.0;
+        leanAngleDeg = 5.2;
+        soilSoftness = 1.8;
+        syncSliders();
+        calculateAndRenderStability();
+        showToast('¡Escenario extremo: Vientos huracanados!');
+      });
+
+      // Reset Camera
+      document.getElementById('btn-reset-cam').addEventListener('click', () => {
+        camera.position.set(55, 34, 65);
+        controls.target.set(0, 24.0, 0);
+        controls.update();
+        showToast('Cámara reajustada');
+      });
+
+      // Mobile Menu Toggle
+      const togglePanelBtn = document.getElementById('btn-toggle-panel');
+      const mainPanel = document.getElementById('main-panel');
+      togglePanelBtn.addEventListener('click', () => {
+        const isHidden = mainPanel.classList.contains('translate-x-full');
+        if (isHidden) {
+          mainPanel.classList.remove('translate-x-full');
+          mainPanel.classList.add('translate-x-0');
+        } else {
+          mainPanel.classList.remove('translate-x-0');
+          mainPanel.classList.add('translate-x-full');
+        }
+      });
+    }
+
+    function syncSliders() {
+      document.getElementById('slider-wind-speed').value = windSpeedKmH;
+      document.getElementById('val-wind-speed').textContent = `${windSpeedKmH.toFixed(0)} km/h`;
+
+      document.getElementById('slider-wind-dir').value = windDirectionDeg;
+      document.getElementById('val-wind-dir').textContent = `${windDirectionDeg}°`;
+
+      document.getElementById('slider-lean-angle').value = leanAngleDeg;
+      const apex = Math.sin((leanAngleDeg * Math.PI) / 180) * TOWER_HEIGHT;
+      document.getElementById('val-lean-angle').textContent = `${leanAngleDeg.toFixed(2)}° (${apex.toFixed(1)} m)`;
+
+      document.getElementById('slider-soil-softness').value = soilSoftness;
+      document.getElementById('val-soil-softness').textContent = soilSoftness < 0.6 ? 'Rígido' : soilSoftness > 1.4 ? 'Blando' : 'Medio';
+    }
+  </script>
+
+  <script>
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();
+      const elapsed = clock.getElapsedTime();
+
+      // 1. Aerodynamic particle streaming
+      if (showWindParticles) {
+        updateWindParticles(delta, windSpeedKmH / 30.0);
+      }
+
+      // 2. High-frequency turbulent dynamic oscillation of the tower under high winds
+      if (windSpeedKmH > 35) {
+        const turbFreq = 4.2;
+        const turbAmp = (windSpeedKmH / 180.0) * 0.0035;
+        const turbulence = Math.sin(elapsed * turbFreq) * turbAmp + Math.cos(elapsed * turbFreq * 2.3) * (turbAmp * 0.5);
+        
+        // Superimpose slight turbulent vortex shedding flutter on the lean
+        const baseLeanRad = -(leanAngleDeg * Math.PI) / 180.0;
+        towerPivotingGroup.rotation.z = baseLeanRad + turbulence;
+      }
+
+      // 3. Pivot marker pulse animation
+      if (pivotMarkerGroup && pivotMarkerGroup.visible) {
+        const pulse = 1.0 + Math.sin(elapsed * 4.5) * 0.15;
+        pivotMarkerGroup.children[0].scale.set(pulse, pulse, pulse);
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // Launch application after window load
+    window.onload = function () {
+      initThree();
+      setupEventListeners();
+      animate();
+    };
+  </script>
+</body>
+</html>
